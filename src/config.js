@@ -30,7 +30,7 @@ const providers = {
   boxapi: {
     baseURL: process.env.BOXAPI_BASE_URL || 'https://ai.boxapi.ir/ai/v1',
     apiKey: process.env.BOXAPI_KEY,
-    model: (provider === 'boxapi' && process.env.LLM_MODEL) || process.env.BOXAPI_MODEL || 'openai/gpt-5.6-sol',
+    model: (provider === 'boxapi' && process.env.LLM_MODEL) || process.env.BOXAPI_MODEL || 'openai/gpt-6-sol',
     proxy: process.env.BOXAPI_PROXY || '',
     maxConcurrent: Number(process.env.BOXAPI_MAX_CONCURRENT || 1),
     rpm: Number(process.env.BOXAPI_RPM || 18),
@@ -39,7 +39,7 @@ const providers = {
   openai: {
     baseURL: process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
     apiKey: process.env.OPENAI_API_KEY,
-    model: (provider === 'openai' && process.env.LLM_MODEL) || process.env.OPENAI_MODEL || 'gpt-5.6-sol',
+    model: (provider === 'openai' && process.env.LLM_MODEL) || process.env.OPENAI_MODEL || 'gpt-6-sol',
     proxy: process.env.OPENAI_PROXY || process.env.HTTPS_PROXY || process.env.HTTP_PROXY || '',
     fastModel: process.env.LLM_FAST_MODEL || 'gpt-4.1-mini',
   },

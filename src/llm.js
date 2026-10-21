@@ -86,8 +86,9 @@ async function open(p, { messages, tools, maxTokens, last = true }) {
   if (reasoning) body.max_completion_tokens = maxTokens;
   else body.max_tokens = maxTokens;
   // OpenAI only allows function tools on chat/completions for GPT-5 when reasoning is off.
-  // GPT-5.6 and later need the same on BoxAPI (GPT-6 only offers tools on /v1/responses).
-  if ((p.name === 'openai' && /gpt-5/.test(p.model)) || /gpt-5\.[6-9]/.test(p.model)) body.reasoning_effort = 'none';
+  // GPT-5.6 and gpt-6-sol need the same on BoxAPI too (gpt-6.1-sol and gpt-6-astra take tools
+  // only on /v1/responses, so they are not used).
+  if ((p.name === 'openai' && /gpt-5/.test(p.model)) || /gpt-5\.[6-9]|gpt-6/.test(p.model)) body.reasoning_effort = 'none';
   // Through BoxAPI the same models accept tools with low effort; keeps the shared credit lean.
   else if (reasoning) body.reasoning_effort = process.env.LLM_REASONING_EFFORT || 'low';
   if (process.env.LLM_TEMPERATURE) body.temperature = Number(process.env.LLM_TEMPERATURE);
