@@ -1,5 +1,5 @@
 // Voice-over for the demo video: speaks every narration line with OpenAI text-to-speech,
-// trims silence and speeds each clip up to a brisk pace. The recorder then holds each
+// trims silence and gently speeds each clip up (rubberband keeps pitch and formants). The recorder then holds each
 // subtitle exactly as long as its clip, so the video is timed to the voice.
 //   node scripts/voice-over.js [--narration scripts/demo-narration.json] [--timeline REC/timeline.json] [--out _share/voice]
 import fs from 'node:fs';
@@ -15,10 +15,12 @@ const NAR = opt('--narration', 'scripts/demo-narration.json');
 const TIMELINE = opt('--timeline', '');
 const OUT = path.resolve(opt('--out', '_share/voice'));
 const MODEL = opt('--model', 'gpt-4o-mini-tts-2025-12-15');
-const VOICE = opt('--voice', 'ash');
-const WPS = Number(opt('--wps', '3.3'));
-const STYLE = 'Speak natural, casual Tehrani Persian, like a young developer presenting his own project to friends and judges. '
-  + 'Warm, friendly and confident, never robotic. Speak quickly, a bit faster than normal conversation, with only very short pauses between sentences. Read the text exactly as written.';
+const VOICE = opt('--voice', 'cedar');
+const WPS = Number(opt('--wps', '2.6'));
+// Above ~1.35x the stretch starts to warble; a slower clip is better than a broken one.
+const MAX_TEMPO = Number(opt('--max-tempo', '1.35'));
+const STYLE = 'Voice: a young Iranian software developer presenting his own project. Speak natural, casual Tehrani Persian, warm and confident, smiling. '
+  + 'Pace: fast and energetic, like an excited demo, with short natural pauses only at the end of sentences. Read the text exactly as written.';
 const key = process.env.OPENAI_API_KEY;
 if (!key) throw new Error('OPENAI_API_KEY is not set');
 const proxy = process.env.OPENAI_PROXY || process.env.HTTPS_PROXY || '';
@@ -32,7 +34,7 @@ const texts = new Set(Object.values(narration).map((t) => t.replace('{pct}', '۹
 if (TIMELINE) for (const c of JSON.parse(fs.readFileSync(TIMELINE, 'utf8')).cues) texts.add(c.text);
 
 // How the speech model should say a few English words; the subtitles keep the original text.
-const SPOKEN = [['BoxAPI', 'باکس اِی‌پی‌آی'], ['PAYMENT_API_KEY', 'پِیمِنت اِی‌پی‌آی کی'], ['viewHistory', 'ویو هیستوری'], ['trending.js', 'ترندینگ جی‌اس'], ['Node.js', 'نود جی‌اس']];
+const SPOKEN = [['BoxAPI', 'باکس اِی‌پی‌آی'], ['PAYMENT_API_KEY', 'پِیمِنت اِی‌پی‌آی کی'], ['viewHistory', 'ویو هیستوری'], ['trending.js', 'ترندینگ جی‌اس'], ['Node.js', 'نود جی‌اس'], ['۵۰۰', 'پونصد'], ['۳۰۰۰', 'سه‌هزار'], ['۹۳', 'نود و سه']];
 const spoken = (text) => SPOKEN.reduce((t, [a, b]) => t.split(a).join(b), text);
 
 const duration = (f) => Number(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', f]).toString().trim());
@@ -53,24 +55,74 @@ async function speak(text, file) {
   throw new Error(`text-to-speech failed for: ${text.slice(0, 40)}`);
 }
 
-let made = 0;
-for (const text of texts) {
-  const id = crypto.createHash('sha1').update(`v2|${MODEL}|${VOICE}|${WPS}|${spoken(text)}`).digest('hex').slice(0, 12);
-  const file = path.join(OUT, `${id}.wav`);
-  if (manifest[text]?.file === path.basename(file) && fs.existsSync(file)) continue;
+// Every take is transcribed back and compared with the text; a take that does not match
+// (a garbled word, a wrong accent on a short line) is spoken again, up to TAKES times.
+const TAKES = Number(opt('--takes', '3'));
+const MIN_SCORE = Number(opt('--min-score', '0.85'));
+const norm = (t) => t.replace(/[\u06F0-\u06F9]/g, (d) => String(d.charCodeAt(0) - 0x06F0)).replace(/[ي]/g, 'ی').replace(/[ك]/g, 'ک').replace(/ە/g, 'ه')
+  .replace(/[\s\u200c.,،:؛!؟?«»()٪%-]/g, '').toLowerCase();
+function similarity(a, b) {
+  a = norm(a); b = norm(b);
+  if (!a.length || !b.length) return 0;
+  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= b.length; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    prev = cur;
+  }
+  return 1 - prev[b.length] / Math.max(a.length, b.length);
+}
+async function transcribe(file) {
+  const fd = new FormData();
+  fd.append('model', 'gpt-4o-transcribe');
+  fd.append('language', 'fa');
+  fd.append('file', new Blob([fs.readFileSync(file)]), path.basename(file));
+  try {
+    const r = await fetch('https://api.openai.com/v1/audio/transcriptions', { method: 'POST', dispatcher, headers: { Authorization: `Bearer ${key}` }, body: fd, signal: AbortSignal.timeout(60000) });
+    return (await r.json()).text || '';
+  } catch { return ''; }
+}
+// Display words people read on screen; the transcriber writes digits and Latin names the same way.
+const heard = (text) => text.replace(/PAYMENT_API_KEY/g, 'پیمنت ای‌پی‌آی کی').replace(/BoxAPI/g, 'باکس ای‌پی‌آی').replace(/viewHistory/g, 'ویو هیستوری').replace(/trending\.js/g, 'ترندینگ جی‌اس').replace(/Node\.js/g, 'نود جی‌اس');
+
+async function take(text, id, n) {
   const raw = path.join(OUT, `${id}.raw.wav`);
   await speak(spoken(text), raw);
-  // Trim silence at both ends, shorten pauses inside to 0.15 s, then speed up (pitch kept)
-  // until the clip reaches the target pace.
+  // Trim silence at both ends and shorten long pauses inside (to 0.25 s, never cutting into
+  // words), then speed up until the clip reaches the target pace.
   const trimmed = path.join(OUT, `${id}.trim.wav`);
-  execFileSync('ffmpeg', ['-v', 'error', '-y', '-i', raw, '-af', 'silenceremove=start_periods=1:start_threshold=-45dB:stop_periods=-1:stop_duration=0.3:stop_threshold=-45dB:stop_silence=0.15,areverse,silenceremove=start_periods=1:start_threshold=-45dB,areverse', trimmed]);
+  execFileSync('ffmpeg', ['-v', 'error', '-y', '-i', raw, '-af', 'silenceremove=start_periods=1:start_threshold=-50dB:stop_periods=-1:stop_duration=0.45:stop_threshold=-50dB:stop_silence=0.25,areverse,silenceremove=start_periods=1:start_threshold=-50dB,areverse', trimmed]);
   const words = text.split(/\s+/).length;
-  const tempo = Math.min(1.6, Math.max(1, WPS / (words / duration(trimmed))));
-  execFileSync('ffmpeg', ['-v', 'error', '-y', '-i', trimmed, '-af', `atempo=${tempo.toFixed(3)}`, '-ar', '48000', '-ac', '1', file]);
+  const tempo = Math.min(MAX_TEMPO, Math.max(1, WPS / (words / duration(trimmed))));
+  const file = path.join(OUT, `${id}.take${n}.wav`);
+  execFileSync('ffmpeg', ['-v', 'error', '-y', '-i', trimmed, '-af', `rubberband=tempo=${tempo.toFixed(3)}:transients=smooth:formant=preserved`, '-ar', '48000', '-ac', '1', file]);
   fs.rmSync(raw); fs.rmSync(trimmed);
-  manifest[text] = { file: path.basename(file), dur: Number(duration(file).toFixed(3)), tempo: Number(tempo.toFixed(3)) };
+  const got = await transcribe(file);
+  const score = Math.max(similarity(got, text), similarity(got, heard(text)));
+  return { file, tempo, score, got };
+}
+
+let made = 0;
+for (const text of texts) {
+  const id = crypto.createHash('sha1').update(`v3|${MODEL}|${VOICE}|${WPS}|${MAX_TEMPO}|${spoken(text)}`).digest('hex').slice(0, 12);
+  const file = path.join(OUT, `${id}.wav`);
+  const have = manifest[text]?.file === path.basename(file) && fs.existsSync(file);
+  if (have && (manifest[text].score ?? 0) >= MIN_SCORE) continue;
+  let best = null;
+  if (have) {
+    // An older clip without a passing score: check it before speaking it again.
+    const got = await transcribe(file);
+    best = { file, tempo: manifest[text].tempo, score: Math.max(similarity(got, text), similarity(got, heard(text))), got, kept: true };
+  }
+  for (let n = 1; n <= TAKES && !(best && best.score >= MIN_SCORE); n++) {
+    const t = await take(text, id, n);
+    if (!best || t.score > best.score) { if (best && !best.kept) fs.rmSync(best.file, { force: true }); best = t; } else fs.rmSync(t.file, { force: true });
+  }
+  if (!best.kept) fs.renameSync(best.file, file);
+  manifest[text] = { file: path.basename(file), dur: Number(duration(file).toFixed(3)), tempo: Number(best.tempo.toFixed(3)), score: Number(best.score.toFixed(3)) };
   made++;
-  console.log(`${manifest[text].dur.toFixed(1)}s x${tempo.toFixed(2)} ${(words / manifest[text].dur).toFixed(1)} w/s  ${id}`);
+  const words = text.split(/\s+/).length;
+  console.log(`${manifest[text].dur.toFixed(1)}s x${best.tempo.toFixed(2)} ${(words / manifest[text].dur).toFixed(1)} w/s  match ${(best.score * 100).toFixed(0)}%  ${id}${best.score < MIN_SCORE ? '  LOW: ' + best.got.slice(0, 60) : ''}`);
   fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 1));
 }
 console.log(`voice clips: ${made} new, ${texts.size} total -> ${OUT}`);

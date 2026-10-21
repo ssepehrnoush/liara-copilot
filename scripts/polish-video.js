@@ -16,6 +16,10 @@ const REC = path.resolve(opt('--rec', '_share/rec-final'));
 const ART = path.resolve(opt('--art', '_share/art'));
 const NAR = path.resolve(opt('--narration', '_share/defense/narration-timed.json'));
 const VOICE = opt('--voice', '') && path.resolve(opt('--voice'));
+// Current narration by line id: a line edited after the recording is spoken and subtitled
+// as edited. Cards speak the "card-<id>" lines.
+const lines = VOICE && fs.existsSync(opt('--lines', 'scripts/demo-narration.json')) ? JSON.parse(fs.readFileSync(opt('--lines', 'scripts/demo-narration.json'), 'utf8')) : {};
+const clips = VOICE ? JSON.parse(fs.readFileSync(path.join(VOICE, 'manifest.json'), 'utf8')) : {};
 const OUT = path.resolve(opt('--out', '_share/video'));
 const WORK = path.join(OUT, 'work');
 const CHROME = opt('--chrome', 'C:/Program Files/Google/Chrome/Application/chrome.exe');
@@ -25,7 +29,9 @@ fs.mkdirSync(WORK, { recursive: true });
 
 const fa = (x) => String(x).replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[d]);
 const ff = (argv, label) => {
-  const r = spawnSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', ...argv], { cwd: WORK, stdio: 'inherit' });
+  let r = spawnSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', ...argv], { cwd: WORK, stdio: 'inherit' });
+  // x264 can fail to allocate when the machine is short of memory: retry once with fewer threads.
+  if (r.status !== 0) r = spawnSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', ...argv.slice(0, -1), '-threads', '2', argv.at(-1)], { cwd: WORK, stdio: 'inherit' });
   if (r.status !== 0) throw new Error(`ffmpeg failed: ${label}`);
 };
 const ENC = ['-r', String(FPS), '-c:v', 'libx264', '-preset', 'medium', '-crf', '19', '-pix_fmt', 'yuv420p'];
@@ -43,8 +49,10 @@ if (!VOICE) {
 } else {
   // Voice mode: keep each cue at real speed while its clip plays and squeeze the silent rest
   // of the cue (to a third, at least 1.2 s), so nothing on screen waits without a reason.
-  const clips = JSON.parse(fs.readFileSync(path.join(VOICE, 'manifest.json'), 'utf8'));
-  const cues = timeline.cues.map((c) => ({ id: c.id, text: c.text, start: (c.start - t0) / 1000, end: (c.end - t0) / 1000, clip: clips[c.text] }));
+  const cues = timeline.cues.map((c) => {
+    const text = lines[c.id] && !lines[c.id].includes('{') ? lines[c.id] : c.text;
+    return { id: c.id, text, start: (c.start - t0) / 1000, end: (c.end - t0) / 1000, clip: clips[text] };
+  });
   const knots = [[0, 0]];
   const squeeze = (b) => {
     const [a, A] = knots.at(-1);
@@ -52,10 +60,13 @@ if (!VOICE) {
     knots.push([b, A + (len <= 1.2 ? len : Math.max(1.2, len / 3))]);
   };
   const keep = (b) => { const [a, A] = knots.at(-1); knots.push([b, A + (b - a)]); };
+  const stretch = (b, len) => { const [, A] = knots.at(-1); knots.push([b, A + len]); };
   squeeze(cues[0].start);
   for (const c of cues) {
-    keep(Math.min(c.end, c.start + (c.clip ? c.clip.dur + 0.45 : c.end - c.start)));
-    squeeze(c.end);
+    const need = c.clip ? c.clip.dur + 0.45 : c.end - c.start;
+    // A clip longer than its scene plays over the scene slowed a little, never over the next line.
+    if (c.end - c.start <= need) stretch(c.end, need);
+    else { keep(c.start + need); squeeze(c.end); }
   }
   squeeze(totalMain);
   const warp = (t) => {
@@ -93,6 +104,10 @@ const chapters = [
   ...CHAPTERS.map((c, i) => ({ ...c, to: CHAPTERS[i + 1]?.from ?? totalMain })),
 ];
 const CARD = { intro: 4.5, chapter: 2.6, outro: 5.5 };
+// A card with a voice line stays up until the line is done; the voice starts after the fade-in.
+const CARD_LEAD = 0.4;
+const cardClip = (id) => clips[lines[`card-${id}`]];
+const cardDur = (id, base) => (cardClip(id) ? Math.max(base, CARD_LEAD + cardClip(id).dur + 0.6) : base);
 
 // ---------------------------------------------------------------- 1) subtitles: one sentence at a time
 // Each sentence is one subtitle, so the text never changes mid-sentence. A long sentence is
@@ -192,9 +207,9 @@ ${c.bar ? '<div class="bar"><i></i></div>' : ''}
 </body></html>`;
 
 const cards = [
-  { id: 'intro', dur: CARD.intro, icon: 'hero.png', kicker: 'چالش لیارا · هکاتون Agentic AI استارکوچ', title: 'لیارا کوپایلت', sub: 'دستیاری که به برنامه‌نویس‌ها کمک می‌کند سایتشان را روی لیارا منتشر و نگهداری کنند', chips: ['اتصال مستقیم به لیارا', 'هر تغییر با تأیید کاربر', 'پیدا کردن علت خطا'] },
-  ...chapters.filter((c) => c.n).map((c) => ({ id: `ch${c.n}`, dur: CARD.chapter, icon: c.icon, kicker: `قسمت ${['', 'اول', 'دوم', 'سوم', 'چهارم', 'پنجم'][c.n]}`, num: fa(c.n), title: c.title, sub: c.sub, bar: true })),
-  { id: 'outro', dur: CARD.outro, icon: 'hero.png', kicker: 'کد و مستندات پروژه', title: 'لیارا کوپایلت', url: 'github.com/ssepehrnoush/liara-copilot', chips: ['دیپلوی از صفر', 'عیب‌یابی ۵۰۰ و کندی', 'ضد تزریق دستور', 'توقف اضطراری'] },
+  { id: 'intro', dur: cardDur('intro', CARD.intro), icon: 'hero.png', kicker: 'چالش لیارا · هکاتون Agentic AI استارکوچ', title: 'لیارا کوپایلت', sub: 'دستیاری که به برنامه‌نویس‌ها کمک می‌کند سایتشان را روی لیارا منتشر و نگهداری کنند', chips: ['اتصال مستقیم به لیارا', 'هر تغییر با تأیید کاربر', 'پیدا کردن علت خطا'] },
+  ...chapters.filter((c) => c.n).map((c) => ({ id: `ch${c.n}`, dur: cardDur(`ch${c.n}`, CARD.chapter), icon: c.icon, kicker: `قسمت ${['', 'اول', 'دوم', 'سوم', 'چهارم', 'پنجم'][c.n]}`, num: fa(c.n), title: c.title, sub: c.sub, bar: true })),
+  { id: 'outro', dur: cardDur('outro', CARD.outro), icon: 'hero.png', kicker: 'کد و مستندات پروژه', title: 'لیارا کوپایلت', url: 'github.com/ssepehrnoush/liara-copilot', chips: ['دیپلوی از صفر', 'عیب‌یابی ۵۰۰ و کندی', 'ضد تزریق دستور', 'توقف اضطراری'] },
 ];
 
 const browser = await chromium.launch({ executablePath: CHROME, headless: true });
@@ -221,13 +236,16 @@ for (const c of cards) {
 await browser.close();
 
 // ---------------------------------------------------------------- 3) cut the main video and join everything
+const card = Object.fromEntries(cards.map((c) => [c.id, c]));
 const parts = ['card-intro.mp4'];
-let clock = CARD.intro;
+const cardAt = { intro: 0 };
+let clock = card.intro.dur;
 const offsets = [];
 chapters.forEach((c, i) => {
   if (c.n) {
     parts.push(`card-ch${c.n}.mp4`);
-    clock += CARD.chapter;
+    cardAt[`ch${c.n}`] = clock;
+    clock += card[`ch${c.n}`].dur;
   }
   const len = c.to - c.from;
   const name = `seg${i}.mp4`;
@@ -238,6 +256,8 @@ chapters.forEach((c, i) => {
   clock += len;
 });
 parts.push('card-outro.mp4');
+cardAt.outro = clock;
+const total = clock + card.outro.dur;
 fs.writeFileSync(path.join(WORK, 'parts.txt'), parts.map((p) => `file '${p}'`).join('\n'));
 const FINAL = path.join(OUT, 'liara-copilot-demo-final.mp4');
 ff(['-f', 'concat', '-safe', '0', '-i', 'parts.txt', ...ENC, '-movflags', '+faststart', VOICE ? path.join(WORK, 'silent.mp4') : FINAL], 'concat');
@@ -249,12 +269,15 @@ const finalNar = narration.map((n) => {
 });
 if (VOICE) {
   // Soundtrack: every clip at its cue's place in the final cut.
-  const voiced = finalNar.filter((n) => n.voice);
+  const voiced = [
+    ...finalNar.filter((n) => n.voice),
+    ...Object.keys(cardAt).filter(cardClip).map((id) => ({ finalStart: cardAt[id] + CARD_LEAD, voice: { file: path.join(VOICE, cardClip(id).file) } })),
+  ];
   const inputs = voiced.flatMap((n) => ['-i', n.voice.file]);
   const graph = voiced.map((n, i) => `[${i}:a]aresample=48000,adelay=${Math.round(n.finalStart * 1000)}:all=1[a${i}]`).join(';')
-    + `;${voiced.map((_, i) => `[a${i}]`).join('')}amix=inputs=${voiced.length}:normalize=0:dropout_transition=0,apad,atrim=0:${(clock + CARD.outro).toFixed(3)},loudnorm=I=-16:TP=-1.5[out]`;
+    + `;${voiced.map((_, i) => `[a${i}]`).join('')}amix=inputs=${voiced.length}:normalize=0:dropout_transition=0,apad,atrim=0:${total.toFixed(3)},loudnorm=I=-16:TP=-1.5[out]`;
   ff([...inputs, '-filter_complex', graph, '-map', '[out]', '-ac', '2', 'voice.wav'], 'voice mix');
   ff(['-i', 'silent.mp4', '-i', 'voice.wav', '-map', '0:v', '-map', '1:a', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '160k', '-shortest', '-movflags', '+faststart', FINAL], 'mux');
 }
-fs.writeFileSync(path.join(OUT, 'narration-final.json'), JSON.stringify({ cards: { intro: [0, CARD.intro], chapters: offsets.filter((_, i) => chapters[i].n).map((o, k) => ({ n: k + 1, title: chapters.filter((c) => c.n)[k].title, at: o.at - CARD.chapter, dur: CARD.chapter })), outro: [clock, CARD.outro] }, shots: finalNar, total: clock + CARD.outro }, null, 1));
-console.log(`done: ${path.join(OUT, 'liara-copilot-demo-final.mp4')} (${Math.round(clock + CARD.outro)} s)`);
+fs.writeFileSync(path.join(OUT, 'narration-final.json'), JSON.stringify({ cards: { intro: [0, card.intro.dur, lines['card-intro'] || ''], chapters: chapters.filter((c) => c.n).map((c) => ({ n: c.n, title: c.title, at: cardAt[`ch${c.n}`], dur: card[`ch${c.n}`].dur, say: lines[`card-ch${c.n}`] || '' })), outro: [cardAt.outro, card.outro.dur, lines['card-outro'] || ''] }, shots: finalNar, total }, null, 1));
+console.log(`done: ${path.join(OUT, 'liara-copilot-demo-final.mp4')} (${Math.round(total)} s)`);
