@@ -315,28 +315,58 @@ export class LiaraApi {
     }
   }
 
+  // After a restart Liara keeps reporting the stopped container for ~5 minutes (metrics
+  // staleness), so for a single-container app only the most recently started applet counts.
+  async scaleOf(name) {
+    const hit = this._scale?.[name];
+    if (hit && Date.now() - hit.at < 60000) return hit.v;
+    let v = 1;
+    try { v = (await this.getApp(name)).scale ?? 1; } catch { /* assume one */ }
+    this._scale = { ...(this._scale || {}), [name]: { at: Date.now(), v } };
+    return v;
+  }
+
+  async newestApplet(name) {
+    const d = await this.req('GET', `/v1/projects/${encodeURIComponent(name)}/metrics/memory`, { query: { since: Math.floor(Date.now() / 1000) - 900 } });
+    let best = null;
+    for (const r of d.result || []) {
+      const first = toMs(r.values?.[0]?.[0]);
+      if (!best || first > best.first) best = { applet: r.applet, first };
+    }
+    return best?.applet || null;
+  }
+
   async metricsSummary(name) {
     const d = await this.req('GET', `/v1/projects/${encodeURIComponent(name)}/metrics/summary`);
-    const last = (arr) => (arr || []).map((x) => toNum(Array.isArray(x.value) ? x.value[1] : x.value)).filter((v) => v !== null);
-    return {
-      cpu: last(d.cpuUsage).reduce((a, b) => a + b, 0),
-      memoryBytes: last(d.memoryUsage).reduce((a, b) => a + b, 0),
-      disks: d.disksUsage || [],
-      raw: d,
-    };
+    let mem = d.memoryUsage || [];
+    let cpu = d.cpuUsage || [];
+    if (mem.length > 1 && (await this.scaleOf(name)) <= 1) {
+      const keep = await this.newestApplet(name).catch(() => null);
+      if (keep) {
+        mem = mem.filter((x) => x.applet === keep);
+        cpu = cpu.filter((x) => x.applet === keep);
+      }
+    }
+    const last = (arr) => arr.map((x) => toNum(Array.isArray(x.value) ? x.value[1] : x.value)).filter((v) => v !== null);
+    return { cpu: last(cpu).reduce((a, b) => a + b, 0), memoryBytes: last(mem).reduce((a, b) => a + b, 0), disks: d.disksUsage || [], raw: d };
   }
 
   // kind: cpu | memory | network-receive | network-transmit
   async metric(name, kind, sinceSec) {
     const d = await this.req('GET', `/v1/projects/${encodeURIComponent(name)}/metrics/${kind}`, { query: { since: sinceSec } });
+    const series = (d.result || []).map((r) => ({ applet: r.applet, first: toMs(r.values?.[0]?.[0]), values: r.values || [] }));
+    const single = series.length > 1 && (await this.scaleOf(name)) <= 1;
     const byT = new Map();
-    for (const series of d.result || []) {
-      for (const [ts, val] of series.values || []) {
+    for (const sr of series) {
+      for (const [ts, val] of sr.values) {
         const t = toMs(ts);
-        byT.set(t, (byT.get(t) || 0) + Number(val));
+        const cur = byT.get(t);
+        if (!cur) byT.set(t, { v: Number(val), first: sr.first });
+        else if (!single) cur.v += Number(val);
+        else if (sr.first > cur.first) byT.set(t, { v: Number(val), first: sr.first }); // newer container wins
       }
     }
-    return [...byT.entries()].sort((a, b) => a[0] - b[0]).map(([t, v]) => ({ t, v }));
+    return [...byT.entries()].sort((a, b) => a[0] - b[0]).map(([t, x]) => ({ t, v: x.v }));
   }
 
   // ---------- domains ----------
