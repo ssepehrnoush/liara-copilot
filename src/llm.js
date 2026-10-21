@@ -1,6 +1,16 @@
 // OpenAI-compatible chat client with streaming + tool calls.
 // Provider is chosen by env (LLM_PROVIDER=boxapi|openai); BoxAPI is the default when its key exists.
+import { fetch as undiciFetch, ProxyAgent } from 'undici';
 import { config } from './config.js';
+
+// Node's built-in fetch ignores HTTPS_PROXY; a provider with `proxy` set goes through it.
+// Used for api.openai.com from Iran (local VPN); BoxAPI is an Iranian gateway and goes direct.
+const agents = new Map();
+function send(p, url, init) {
+  if (!p.proxy) return fetch(url, init);
+  if (!agents.has(p.proxy)) agents.set(p.proxy, new ProxyAgent(p.proxy));
+  return undiciFetch(url, { ...init, dispatcher: agents.get(p.proxy) });
+}
 
 function unavailable(msg) {
   const e = new Error(msg);
@@ -33,6 +43,8 @@ async function open(p, { messages, tools, maxTokens }) {
   // Newer reasoning-era models reject some sampling params; send only what each family accepts.
   if (/gpt-5|(^|\/)o\d/.test(p.model)) body.max_completion_tokens = maxTokens;
   else body.max_tokens = maxTokens;
+  // OpenAI only allows function tools on chat/completions for GPT-5 when reasoning is off.
+  if (p.name === 'openai' && /gpt-5/.test(p.model)) body.reasoning_effort = 'none';
   if (process.env.LLM_TEMPERATURE) body.temperature = Number(process.env.LLM_TEMPERATURE);
   if (tools?.length) {
     body.tools = tools;
@@ -41,7 +53,7 @@ async function open(p, { messages, tools, maxTokens }) {
   let res;
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      res = await fetch(`${p.baseURL}/chat/completions`, {
+      res = await send(p, `${p.baseURL}/chat/completions`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${p.apiKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify(body),

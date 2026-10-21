@@ -17,6 +17,7 @@
   "dependencies": {
     "express": "^4.21.2",
     "ignore": "^6.0.2",
-    "tar": "^7.4.3"
+    "tar": "^7.4.3",
+    "undici": "^7.16.0"
   }
 }

@@ -4,7 +4,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { config } from '../config.js';
-import { analyzeProject, recommendPlan, searchCode, readFileSafe } from '../analyzer.js';
+import { analyzeProject, recommendPlan, searchCode, readFileSafe, fetchGithub } from '../analyzer.js';
 import { deployRelease } from '../deployer.js';
 import { httpCheck } from '../probe.js';
 import { collectEvidence, verifyRecovery } from '../diagnose.js';
@@ -25,8 +25,20 @@ function requireScope(app) {
   }
 }
 
+// A local folder (absolute, or relative to the copilot root). URLs and missing paths
+// resolve to null so callers fall back to the folder analyze_project already fetched.
+function localDir(source) {
+  if (!source || /^https?:\/\//i.test(source)) return null;
+  for (const p of [path.resolve(source), path.resolve(config.root, source)]) {
+    if (fs.existsSync(p) && fs.statSync(p).isDirectory()) return p;
+  }
+  return null;
+}
+
 function projectDir(app, source) {
-  if (source) return source;
+  const local = localDir(source);
+  if (local) return local;
+  if (source && /^https?:\/\//i.test(source)) return null;
   const info = appInfo(app);
   if (info?.dir && fs.existsSync(info.dir)) return info.dir;
   return null;
@@ -325,7 +337,7 @@ export const tools = [
       if (apps.some((x) => x.name === a.name)) issues.push(`اپی با نام ${a.name} از قبل وجود دارد.`);
       if (!plan) issues.push(`پلن ${a.planID} در لیارا موجود نیست.`);
       const runwayH = hourly ? billing.balance / hourly : null;
-      const dir = a.source || session.project?.dir;
+      const dir = localDir(a.source) || session.project?.dir;
       if (!dir) issues.push('مسیر پروژه مشخص نیست؛ اول پروژه را تحلیل کنید.');
       const blocked = runwayH !== null && runwayH < 1
         ? { reasonFa: `موجودی حساب ${toman(billing.balance)} است و حتی یک ساعت این سرویس (${toman(hourly)} در ساعت) را پوشش نمی‌دهد. شارژ حساب کاری است که فقط خودتان می‌توانید انجام دهید.`, actionUrl: 'https://console.liara.ir/billing', actionLabel: 'شارژ حساب در کنسول لیارا', retryLabel: 'شارژ کردم، دوباره بررسی کن' }
@@ -351,7 +363,7 @@ export const tools = [
       };
     },
     async run(a, { liara, session, step, inputs }) {
-      const dir = a.source || session.project?.dir;
+      const dir = localDir(a.source) || session.project?.dir;
       step({ step: 'balance', status: 'running', detail: 'بررسی موجودی' });
       const [{ hourly }, billing] = await Promise.all([planInfo(liara, a.planID, a.bundlePlanID), liara.billing()]);
       if (hourly && billing.balance < hourly) {
@@ -398,11 +410,12 @@ export const tools = [
     async preview(a, { liara }) {
       requireScope(a.app);
       const app = await liara.getApp(a.app);
-      const dir = projectDir(a.app, a.source);
+      const gh = /^https?:\/\/(www\.)?github\.com\//i.test(a.source || '') ? a.source : null;
+      const dir = gh || projectDir(a.app, a.source);
       const rel = await liara.listReleases(a.app, 1).catch(() => ({ releases: [] }));
       return {
         titleFa: 'انتشار نسخهٔ جدید',
-        summaryFa: `نسخهٔ جدید ${a.app} از پوشهٔ ${dir ? path.basename(dir) : '?'} ساخته و جایگزین نسخهٔ فعلی می‌شود.`,
+        summaryFa: `نسخهٔ جدید ${a.app} از ${gh ? 'ریپوی گیت‌هاب' : `پوشهٔ ${dir ? path.basename(dir) : '?'}`} ساخته و جایگزین نسخهٔ فعلی می‌شود.`,
         changes: [
           { label: 'نسخهٔ فعلی', before: rel.releases[0]?.tag || '-', after: 'نسخهٔ جدید' },
           { label: 'سورس', after: dir || 'نامشخص' },
@@ -419,7 +432,7 @@ export const tools = [
     async run(a, { liara, step, session }) {
       requireScope(a.app);
       const app = await liara.getApp(a.app);
-      const dir = projectDir(a.app, a.source);
+      const dir = /^https?:\/\/(www\.)?github\.com\//i.test(a.source || '') ? await fetchGithub(a.source) : projectDir(a.app, a.source);
       const info = appInfo(a.app) || {};
       const rel = await deployRelease(liara, { app: a.app, dir, port: info.port || 3000, platform: app.platform, message: a.message || 'New version by Liara Copilot' }, step);
       let routes = null;

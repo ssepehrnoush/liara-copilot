@@ -38,6 +38,14 @@ function judge(h) {
   return { level: 'healthy' };
 }
 
+let pokeTimer = null;
+let runNow = null;
+// Re-check soon after a fix so the status and alert do not lag behind reality.
+export function pokeWatcher(delayMs = 4000) {
+  clearTimeout(pokeTimer);
+  pokeTimer = setTimeout(() => runNow?.(), delayMs);
+}
+
 export function startWatcher(liara, onAlert) {
   let tick = 0;
   const run = async () => {
@@ -78,6 +86,7 @@ export function startWatcher(liara, onAlert) {
       }
     }));
   };
+  runNow = () => run().catch(() => {});
   const timer = setInterval(() => run().catch(() => {}), config.watchIntervalSec * 1000);
   setTimeout(() => run().catch(() => {}), 3000);
   return () => clearInterval(timer);

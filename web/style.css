@@ -156,7 +156,7 @@ button { font-family: inherit; font-size: inherit; cursor: pointer; }
 .verdict.recovered { background: var(--ok-soft); color: var(--ok); }
 .verdict.improved { background: var(--warn-soft); color: var(--warn); }
 .verdict.not_recovered { background: var(--bad-soft); color: var(--bad); }
-.handoff pre { font-family: var(--mono); font-size: 12.5px; direction: ltr; text-align: left; background: var(--panel-2); border-radius: 8px; padding: 8px 10px; max-height: 240px; overflow: auto; white-space: pre-wrap; }
+.handoff pre { font-family: var(--mono); font-size: 12.5px; direction: ltr; text-align: start; unicode-bidi: plaintext; background: var(--panel-2); border-radius: 8px; padding: 8px 10px; max-height: 240px; overflow: auto; white-space: pre-wrap; }
 
 /* composer */
 .composer { border-top: 1px solid var(--line); padding: 10px 14px 12px; }

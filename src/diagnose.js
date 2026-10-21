@@ -109,7 +109,7 @@ function analyzeLogs(lines, appEnvKeys) {
     for (const re of ENV_RES) {
       const k = [...text.matchAll(re)].map((m) => m[1]).find((x) => x && !NOT_ENV.has(x.toUpperCase()));
       if (k) {
-        missingEnv.set(k, { key: k, count: (missingEnv.get(k)?.count || 0) + 1, sample: text.replace(/^\S+\s+/, '').slice(0, 220), presentInApp: appEnvKeys.includes(k) });
+        missingEnv.set(k, { key: k, count: (missingEnv.get(k)?.count || 0) + 1, sample: text.replace(/^\S+\s+/, '').slice(0, 220), presentInApp: appEnvKeys.includes(k), last: l.t });
         break;
       }
     }
@@ -181,14 +181,18 @@ export async function collectEvidence(liara, appName, { minutes = 30, paths = ['
     unavailable: [releases, applets, logs, events, cpu, mem].filter((x) => !x.ok).map((x) => x.e),
   };
 
-  const hypotheses = rankHypotheses(evidence, { latest, prevReady });
+  // Errors logged before the current container started belong to an older container.
+  const starts = (applets.ok ? applets.v : []).map((a) => Date.parse(a.since)).filter((t) => !Number.isNaN(t));
+  const containerStart = starts.length ? Math.max(...starts) : null;
+  evidence.containerStartedAt = iso(containerStart);
+  const hypotheses = rankHypotheses(evidence, { latest, prevReady, containerStart });
   const id = `inc-${++incidentSeq}`;
   const record = { id, app: appName, at: Date.now(), paths, baseline: { probe: evidence.probe, memory: evidence.memory, errors: evidence.logs?.errors ?? null, cpu: evidence.cpu }, hypotheses };
   incidents.set(id, record);
   return { incidentId: id, evidence, hypotheses };
 }
 
-function rankHypotheses(ev, { latest, prevReady }) {
+function rankHypotheses(ev, { latest, prevReady, containerStart }) {
   const H = [];
   const probe = ev.probe || {};
   const err5xx = (probe.paths || []).reduce((a, p) => a + p.errors5xx, 0);
@@ -204,7 +208,9 @@ function rankHypotheses(ev, { latest, prevReady }) {
     H.push({ id: 'app_stopped', title: 'سرویس خاموش است', confidence: 0.97, evidence: ['مقدار scale برنامه صفر است؛ یعنی هیچ کانتینری اجرا نمی‌شود.'], fix: { tool: 'start_app', fa: 'روشن کردن دوبارهٔ سرویس' } });
   }
 
+  const pathsOk = (ev.probe?.paths || []).every((p) => p.ok === p.samples);
   for (const m of ev.logs?.missingEnv || []) {
+    if (containerStart && m.last && m.last < containerStart && pathsOk) continue; // already fixed by a restart/env change
     H.push({
       id: 'missing_env',
       title: `متغیر محیطی ${m.key} تنظیم نشده`,

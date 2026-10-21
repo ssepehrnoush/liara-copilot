@@ -31,12 +31,14 @@ const providers = {
     baseURL: process.env.BOXAPI_BASE_URL || 'https://ai.boxapi.ir/ai/v1',
     apiKey: process.env.BOXAPI_KEY,
     model: (provider === 'boxapi' && process.env.LLM_MODEL) || process.env.BOXAPI_MODEL || 'anthropic/claude-sonnet-5.5',
+    proxy: process.env.BOXAPI_PROXY || '',
     fastModel: process.env.LLM_FAST_MODEL || 'openai/gpt-4.1-mini',
   },
   openai: {
     baseURL: process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
     apiKey: process.env.OPENAI_API_KEY,
-    model: (provider === 'openai' && process.env.LLM_MODEL) || process.env.OPENAI_MODEL || 'gpt-4.1',
+    model: (provider === 'openai' && process.env.LLM_MODEL) || process.env.OPENAI_MODEL || 'gpt-5.4',
+    proxy: process.env.OPENAI_PROXY || process.env.HTTPS_PROXY || process.env.HTTP_PROXY || '',
     fastModel: process.env.LLM_FAST_MODEL || 'gpt-4.1-mini',
   },
 };

@@ -9,6 +9,7 @@ import { scrubDeep } from './redact.js';
 import { managedApps } from './scope.js';
 import { config } from './config.js';
 import { runFallback } from './fallback.js';
+import { pokeWatcher } from './watcher.js';
 
 const sessions = new Map();
 const APPROVAL_TIMEOUT_MS = 15 * 60 * 1000;
@@ -119,7 +120,10 @@ async function runTool(session, call, ctx) {
     const safe = scrubDeep(result, Object.values(inputs));
     emit(session, 'tool_end', { callId: call.id, tool: tool.name, labelFa: tool.labelFa, ok: result?.ok !== false && !result?.error, ui: tool.ui, data: tool.ui ? safe : undefined, ms: Date.now() - started });
     audit({ actor: kind === 'auto' ? 'agent' : 'agent', kind, tool: tool.name, risk: tool.risk, app, status: result?.ok === false || result?.error ? 'error' : 'ok', durationMs: Date.now() - started, summary: tool.labelFa, args }, Object.values(inputs));
-    if (kind !== 'auto') emit(session, 'refresh', {});
+    if (kind !== 'auto') {
+      emit(session, 'refresh', {});
+      pokeWatcher();
+    }
     return kind === 'approved' ? { approvedByUser: true, ...safe } : safe;
   } catch (e) {
     const msg = e.fa ? `${e.fa} (${e.status || ''})` : e.message;
