@@ -2,6 +2,7 @@
 // HTTP probes in parallel, then turns them into ranked, evidence-backed hypotheses.
 // The LLM explains and refines these; the numbers come from here, not from the model.
 import { httpCheck } from './probe.js';
+import { findInjections } from './safety.js';
 
 const MB = 1024 * 1024;
 const incidents = new Map();
@@ -179,7 +180,7 @@ export async function collectEvidence(liara, appName, { minutes = 30, paths = ['
     probe: probe.ok ? probe.v : { error: probe.e },
     releases: rel.slice(0, 4).map((r) => ({ id: r.id, tag: r.tag, state: r.state, createdAt: r.createdAt, finishedAt: r.finishedAt, sourceAvailable: r.sourceAvailable })),
     applets: applets.ok ? applets.v : { error: applets.e },
-    logs: logA ? { lines: logA.total, errors: logA.errorCount, firstErrorAt: iso(logA.firstErrorAt), topErrors: logA.top.map((g) => ({ count: g.count, first: iso(g.first), last: iso(g.last), sample: g.sample, stack: g.context })), missingEnv: logA.missingEnv, dependencyErrors: logA.depErrors, accessCodes: logA.accessCodes, growingCounters: logA.growing, latencyTrend: logA.latencyTrend } : { error: logs.e },
+    logs: logA ? { lines: logA.total, errors: logA.errorCount, firstErrorAt: iso(logA.firstErrorAt), topErrors: logA.top.map((g) => ({ count: g.count, first: iso(g.first), last: iso(g.last), sample: g.sample, stack: g.context })), missingEnv: logA.missingEnv, dependencyErrors: logA.depErrors, accessCodes: logA.accessCodes, growingCounters: logA.growing, latencyTrend: logA.latencyTrend, untrustedLinesTryingToInstructAI: findInjections('get_logs', logs.v.map((l) => l.line)) } : { error: logs.e },
     trendSince: cut > since * 1000 ? iso(cut) : null,
     memory: memS ? { firstMB: Math.round(memS.first / MB), lastMB: Math.round(memS.last / MB), maxMB: Math.round(memS.max / MB), slopeMBperMin: Math.round((memS.slopePerMin / MB) * 10) / 10, trendR2: Math.round(memS.r2 * 100) / 100, pctOfLimit: ramLimit ? Math.round((memS.last / ramLimit) * 100) : null, maxPctOfLimit: ramLimit ? Math.round((memS.max / ramLimit) * 100) : null, spanMin: memS.spanMin } : { error: mem.ok ? 'no data' : mem.e },
     cpu: cpuS ? { avgPctOfPlan: cpuPct?.avg ?? null, maxPctOfPlan: cpuPct?.max ?? null, points: cpuS.points } : { error: cpu.ok ? 'no data' : cpu.e },
@@ -323,10 +324,15 @@ export async function verifyRecovery(liara, appName, incidentId, { sinceMs } = {
   for (;;) {
     const roundStart = Date.now();
     probe = await httpCheck(liara.appUrl(appName), { paths, samples: 4 });
-    rounds.push({ ok: probe.ok, total: probe.total });
-    if (probe.ok === probe.total) { settledAt = roundStart; break; }
-    if (Date.now() - t0 > 45000) break;
-    await new Promise((r) => setTimeout(r, 6000));
+    rounds.push({ ok: probe.ok, total: probe.total, at: roundStart });
+    // Two healthy rounds in a row: the old container is out of rotation.
+    const prev = rounds.at(-2);
+    if (probe.ok === probe.total && prev && prev.ok === prev.total) { settledAt = prev.at; break; }
+    if (Date.now() - t0 > 50000) {
+      if (probe.ok === probe.total) settledAt = roundStart;
+      break;
+    }
+    await new Promise((r) => setTimeout(r, probe.ok === probe.total ? 3000 : 6000));
   }
   const [logs, mem] = await Promise.all([
     settle(liara.logs(appName, { startSec: fromSec, limit: 400 })),

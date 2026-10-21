@@ -246,11 +246,15 @@ export class LiaraApi {
   }
 
   // ---------- observability ----------
+  // Liara returns at most 100 lines per call: direction=forward gives the oldest lines of the
+  // window, last_lines=true the newest. We always take the newest page, then page forward
+  // from the window start until the pages meet (or the page budget runs out).
   async logs(name, { startSec, limit = 400 } = {}) {
     const start = startSec ?? Math.floor(Date.now() / 1000) - 15 * 60;
-    let lines = [];
-    try {
-      const d = await this.req('GET', `/v2/projects/${encodeURIComponent(name)}/logs`, { query: { start, direction: 'forward' }, timeoutMs: 20000 });
+    const url = `/v2/projects/${encodeURIComponent(name)}/logs`;
+    const parse = (d) => {
+      const out = [];
+      out.raw = (d.data || []).reduce((a, e) => a + (e.values || []).length, 0);
       for (const entry of d.data || []) {
         for (const v of entry.values || []) {
           // Each value is [ns timestamp, '{"type":"stdout","_entry":"<line>"}'].
@@ -259,16 +263,34 @@ export class LiaraApi {
           if (line.startsWith('{')) {
             try { const j = JSON.parse(line); line = String(j._entry ?? j.log ?? j.message ?? ''); stream = j.type; } catch { /* keep raw */ }
           }
-          if (line.trim()) lines.push({ t: toMs(v[0]), line, stream, releaseId: entry.metaData?.releaseId });
+          if (line.trim()) out.push({ t: toMs(v[0]), ns: String(v[0]), line, stream, releaseId: entry.metaData?.releaseId });
         }
+      }
+      return out;
+    };
+    let lines = [];
+    try {
+      const newest = parse(await this.req('GET', url, { query: { start, direction: 'forward', last_lines: true }, timeoutMs: 20000 }));
+      lines = newest;
+      const oldestNewest = Math.min(...newest.map((l) => l.t));
+      let from = start;
+      for (let page = 0; newest.raw >= 100 && page < Math.ceil(limit / 100) - 1; page++) {
+        const chunk = parse(await this.req('GET', url, { query: { start: from, direction: 'forward' }, timeoutMs: 20000 }));
+        if (!chunk.raw) break;
+        lines = lines.concat(chunk);
+        const last = Math.max(...chunk.map((l) => l.t));
+        if (last >= oldestNewest || chunk.raw < 100) break;
+        from = Math.floor(last / 1000);
       }
     } catch (e) {
       if (e.status === 404) throw e;
       const d = await this.req('GET', `/v1/projects/${encodeURIComponent(name)}/logs`, { query: { since: start } });
       lines = (Array.isArray(d) ? d : d.data || []).map((l) => ({ t: toMs(l.datetime), line: String(l.message ?? ''), stream: l.type }));
     }
+    const seen = new Set();
+    lines = lines.filter((l) => { const k = `${l.ns || l.t}|${l.line}`; if (seen.has(k)) return false; seen.add(k); return true; });
     lines.sort((a, b) => (a.t || 0) - (b.t || 0));
-    return lines.slice(-limit);
+    return lines.slice(-limit).map(({ ns, ...l }) => l);
   }
 
   async events(name, { startSec, endSec } = {}) {

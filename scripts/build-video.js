@@ -13,9 +13,9 @@ const fontDir = path.resolve('node_modules/vazirmatn/fonts/ttf');
 const list = [];
 frames.forEach((f, i) => {
   const next = i + 1 < frames.length ? frames[i + 1].t : end;
-  list.push(`file 'frames/${f.file}'`, `duration ${Math.max(0.001, (next - f.t) / 1000).toFixed(3)}`);
+  list.push(`file '${f.path || `frames/${f.file}`}'`, `duration ${Math.max(0.001, (next - f.t) / 1000).toFixed(3)}`);
 });
-list.push(`file 'frames/${frames.at(-1).file}'`);
+list.push(`file '${frames.at(-1).path || `frames/${frames.at(-1).file}`}'`);
 fs.writeFileSync(path.join(dir, 'frames.txt'), list.join('\n'));
 
 const ts = (ms, sep) => {

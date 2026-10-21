@@ -338,7 +338,7 @@
       approve.disabled = Boolean(c.blocked) || missing || (confirmBox && !confirmBox.checked);
     };
     const inputEls = (c.inputs || []).map((i) => {
-      const input = h('input', { type: i.secret ? 'password' : 'text', value: i.prefill || '', placeholder: i.secret ? 'مقدار را اینجا وارد کنید' : '', autocomplete: 'off', oninput: validate });
+      const input = h('input', { type: i.secret ? 'password' : 'text', dir: 'auto', class: i.secret ? '' : 'plain', value: i.prefill || '', placeholder: i.secret ? 'مقدار را اینجا وارد کنید' : '', autocomplete: 'off', oninput: validate });
       inputs.set(i.key, { input, required: i.required });
       return h('label', {}, h('span', { class: 'k' }, `${i.key}${i.required ? ' *' : ''}`), input, i.hint ? h('span', { class: 'hint' }, i.hint) : null);
     });
