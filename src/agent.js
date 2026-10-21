@@ -161,6 +161,8 @@ async function runTool(session, call, ctx) {
 }
 
 export const llmState = { downUntil: 0, reason: null, checkedAt: 0 };
+const PROVIDER_FA = { boxapi: 'BoxAPI', openai: 'OpenAI', rayegan: 'Rayegan' };
+const providerFa = (name) => PROVIDER_FA[name] || name;
 
 // Tells the UI and the audit log which provider answered, once per change, so a fallback
 // (or an exhausted BoxAPI budget) is never silent.
@@ -172,8 +174,8 @@ function noteProvider(session) {
   llmState.lastProvider = key;
   const p = config.llm.chain.find((x) => x.name === config.llm.active);
   broadcast('llm_status', { available: true, provider: config.llm.active, model: p?.model, fallback: Boolean(fb), budget: Boolean(fb?.budget), reason: fb?.failed?.map((f) => f.reason).join(' | ').slice(0, 200) });
-  if (fb) audit({ actor: 'agent', kind: 'alert', tool: 'llm', risk: 'auto', summary: fb.budget ? `اعتبار ${fb.failed[0].name === 'boxapi' ? 'BoxAPI' : fb.failed[0].name} تمام شده؛ پاسخ از ${fb.to === 'openai' ? 'OpenAI' : fb.to} (پشتیبان) آمد` : `${fb.failed[0].name === 'boxapi' ? 'BoxAPI' : fb.failed[0].name} جواب نداد؛ پاسخ از ${fb.to === 'openai' ? 'OpenAI' : fb.to} (پشتیبان) آمد`, status: 'error' });
-  else if (!first) audit({ actor: 'agent', kind: 'alert', tool: 'llm', risk: 'auto', summary: `پاسخ‌ها دوباره از ${config.llm.active === 'boxapi' ? 'BoxAPI' : config.llm.active} می‌آید`, status: 'ok' });
+  if (fb) audit({ actor: 'agent', kind: 'alert', tool: 'llm', risk: 'auto', summary: fb.budget ? `اعتبار ${providerFa(fb.failed[0].name)} تمام شده؛ پاسخ از ${providerFa(fb.to)} (پشتیبان) آمد` : `${providerFa(fb.failed[0].name)} جواب نداد؛ پاسخ از ${providerFa(fb.to)} (پشتیبان) آمد`, status: 'error' });
+  else if (!first) audit({ actor: 'agent', kind: 'alert', tool: 'llm', risk: 'auto', summary: `پاسخ‌ها دوباره از ${providerFa(config.llm.active)} می‌آید`, status: 'ok' });
 }
 
 // Cheap 1-token call so the UI can say up front whether the model is reachable.
@@ -243,6 +245,15 @@ export async function runTurn(session, userText, liara) {
       await fallbackTurn(session, userText, ctx);
       return;
     }
+    // A weak model (e.g. a free one through Rayegan) may answer with nothing, or with tool calls
+    // that name no tool or carry broken JSON. After two such calls the turn goes to rule mode.
+    let broken = 0;
+    const toRuleMode = async (why) => {
+      audit({ actor: 'agent', kind: 'alert', tool: 'llm', risk: 'auto', summary: `پاسخ مدل ${providerFa(config.llm.active)} قابل استفاده نبود (${why})؛ این نوبت با حالت قواعد ادامه یافت`, status: 'error' });
+      llmState.lastProvider = undefined;
+      llmState.reason = `پاسخ مدل قابل استفاده نبود: ${why}`;
+      await fallbackTurn(session, userText, ctx);
+    };
     for (let stepNo = 0; stepNo < MAX_STEPS; stepNo++) {
       const msgId = randomUUID().slice(0, 8);
       emit(session, 'assistant_start', { msgId });
@@ -268,11 +279,20 @@ export async function runTurn(session, userText, liara) {
       }
       emit(session, 'assistant_end', { msgId });
       noteProvider(session);
+      if (stepNo === 0 && !message.tool_calls?.length && !String(message.content || '').trim()) {
+        await toRuleMode('پاسخ خالی');
+        return;
+      }
       session.messages.push(message);
       if (!message.tool_calls?.length) break;
       for (const call of message.tool_calls) {
         const result = await runTool(session, call, ctx);
+        if (/^unknown tool|not valid JSON/.test(result?.error || '')) broken++;
         session.messages.push({ role: 'tool', tool_call_id: call.id, content: clip(scrubDeep(result), 14000) });
+      }
+      if (broken >= 2) {
+        await toRuleMode('فراخوانی ابزار نامعتبر');
+        return;
       }
     }
   } catch (e) {

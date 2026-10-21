@@ -562,7 +562,8 @@
 
   const welcomeClone = $('#welcome');
 
-  const modelLabel = (model, provider) => `مدل: ${String(model || '').split('/').pop()} از ${provider === 'boxapi' ? 'BoxAPI' : 'OpenAI'}`;
+  const PROVIDERS = { boxapi: 'BoxAPI', openai: 'OpenAI', rayegan: 'Rayegan (رایگان)' };
+  const modelLabel = (model, provider) => `مدل: ${String(model || '').split('/').pop()} از ${PROVIDERS[provider] || provider}`;
 
   async function boot() {
     const cfg = await fetch('/api/config').then((r) => r.json());
