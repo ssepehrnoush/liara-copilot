@@ -562,7 +562,7 @@
 
   const welcomeClone = $('#welcome');
 
-  const PROVIDERS = { boxapi: 'BoxAPI', openai: 'OpenAI', rayegan: 'Rayegan (رایگان)' };
+  const PROVIDERS = { boxapi: 'BoxAPI', openai: 'OpenAI' };
   const modelLabel = (model, provider) => `مدل: ${String(model || '').split('/').pop()} از ${PROVIDERS[provider] || provider}`;
 
   async function boot() {

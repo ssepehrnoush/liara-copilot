@@ -43,14 +43,6 @@ const providers = {
     proxy: process.env.OPENAI_PROXY || process.env.HTTPS_PROXY || process.env.HTTP_PROXY || '',
     fastModel: process.env.LLM_FAST_MODEL || 'gpt-4.1-mini',
   },
-  // Opt-in free mode: each user runs Rayegan (github.com/ssepehrnoush/rayegan) on their own
-  // machine with their own free quotas. It needs no key; the placeholder only marks it usable.
-  rayegan: {
-    baseURL: process.env.RAYEGAN_BASE_URL || 'http://127.0.0.1:8787/v1',
-    apiKey: process.env.RAYEGAN_KEY || 'local',
-    model: (provider === 'rayegan' && process.env.LLM_MODEL) || process.env.RAYEGAN_MODEL || 'auto',
-    proxy: '',
-  },
 };
 
 // Second choice when the first provider fails (budget, rate limit, timeout, 5xx). "none" turns it off.

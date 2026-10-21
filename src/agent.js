@@ -161,7 +161,7 @@ async function runTool(session, call, ctx) {
 }
 
 export const llmState = { downUntil: 0, reason: null, checkedAt: 0 };
-const PROVIDER_FA = { boxapi: 'BoxAPI', openai: 'OpenAI', rayegan: 'Rayegan' };
+const PROVIDER_FA = { boxapi: 'BoxAPI', openai: 'OpenAI' };
 const providerFa = (name) => PROVIDER_FA[name] || name;
 
 // Tells the UI and the audit log which provider answered, once per change, so a fallback
@@ -245,8 +245,8 @@ export async function runTurn(session, userText, liara) {
       await fallbackTurn(session, userText, ctx);
       return;
     }
-    // A weak model (e.g. a free one through Rayegan) may answer with nothing, or with tool calls
-    // that name no tool or carry broken JSON. After two such calls the turn goes to rule mode.
+    // A model may answer with nothing, or with tool calls that name no tool or carry broken
+    // JSON. After two such calls the turn goes to rule mode.
     let broken = 0;
     const toRuleMode = async (why) => {
       audit({ actor: 'agent', kind: 'alert', tool: 'llm', risk: 'auto', summary: `پاسخ مدل ${providerFa(config.llm.active)} قابل استفاده نبود (${why})؛ این نوبت با حالت قواعد ادامه یافت`, status: 'error' });
