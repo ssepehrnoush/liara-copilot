@@ -292,7 +292,28 @@ function rankHypotheses(ev, { latest, prevReady, containerStart }) {
     H.push({ id: 'app_error', title: 'خطای داخلی برنامه', confidence: 0.55, evidence: [`${n(err5xx)} از ${n(total)} درخواست خطای 5xx گرفت.`, ev.logs?.topErrors?.[0] ? `خطای غالب در لاگ: «${ev.logs.topErrors[0].sample.slice(0, 140)}»` : 'در بازهٔ لاگ خطای مشخصی پیدا نشد.'], fix: { tool: 'handoff_to_coding_agent', fa: 'ارسال جزئیات خطا به ایجنت کدنویس' } });
   }
 
-  if (slow && !H.some((h) => ['memory_leak', 'memory_pressure', 'cpu_saturation'].includes(h.id))) {
+  // Unbounded data growth: a counter in the app's own logs keeps climbing while every request
+  // gets slower. Often shows up before RAM is full, because scanning the data costs CPU first.
+  const counters = ev.logs?.growingCounters || [];
+  const latencyClimb = lt && lt.lateMs > Math.max(300, lt.earlyMs * 3);
+  if (!H.some((h) => h.id === 'memory_leak') && counters.length && (slow || latencyClimb)) {
+    H.push({
+      id: 'data_growth',
+      title: 'داده‌ای در حافظه مدام بزرگ می‌شود و هر درخواست را کندتر می‌کند',
+      confidence: Math.min(0.9, 0.6 + (latencyClimb ? 0.15 : 0) + (cpuHot ? 0.1 : 0) + (mem.slopeMBperMin > 1 ? 0.05 : 0)),
+      evidence: [
+        ...counters.map((c) => `در لاگ برنامه، شمارندهٔ ${c.key} از ${n(c.first)} به ${n(c.last)} رسیده و هیچ‌وقت کم نشده.`),
+        latencyClimb ? `زمان پاسخ در لاگ دسترسی از ${n(lt.earlyMs)} به ${n(lt.lateMs)} میلی‌ثانیه رسیده؛ هرچه داده بیشتر، پاسخ کندتر.` : null,
+        slow ? `${slowFa}.` : null,
+        cpuHot ? `CPU به ${n(ev.cpu.maxPctOfPlan)}٪ سهم پلن رسیده چون کد هر بار کل این داده را پیمایش می‌کند.` : null,
+        mem.lastMB != null ? `رم فعلاً ${n(mem.lastMB)} مگابایت است؛ اگر ادامه پیدا کند به سقف پلن هم می‌رسد.` : null,
+      ].filter(Boolean),
+      fix: { tool: 'search_project_code', fa: 'پیدا کردن جایی در کد که این داده را نگه می‌دارد و محدود کردنش؛ تا اصلاح، ری‌استارت حافظه را خالی می‌کند' },
+      altFix: { tool: 'restart_app', fa: 'ری‌استارت (راه موقت)' },
+    });
+  }
+
+  if (slow && !H.some((h) => ['memory_leak', 'memory_pressure', 'cpu_saturation', 'data_growth'].includes(h.id))) {
     H.push({ id: 'slow_app', title: 'کندی بدون کمبود منابع (احتمالاً کوئری یا سرویس بیرونی کند)', confidence: 0.45, evidence: [`میانهٔ زمان پاسخ ${n(probe.p50ms)} میلی‌ثانیه است ولی رم و CPU در محدودهٔ عادی است.`], fix: { tool: 'search_project_code', fa: 'بررسی کد مسیرهای کند' } });
   }
 

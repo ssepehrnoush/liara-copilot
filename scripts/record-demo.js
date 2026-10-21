@@ -379,8 +379,15 @@ try {
     await say('علت اول نشت حافظه است: رم تقریباً خطی بالا رفته و شمارندهٔ viewHistory در لاگ مدام بزرگ شده. پر بودن CPU هم نتیجهٔ همین نشت است، پس بزرگ کردن پلن راه‌حل نیست.');
     await show('.card:has-text("عیب‌یابی")', 7);
     await say('کوپایلت سراغ کد رفت و فایل trending.js را پیدا کرد که هر بازدید را برای همیشه در حافظه نگه می‌دارد.');
-    await approveAll({ readSec: 5, onCard: async () => { await say('تا اصلاح کد، ری‌استارت را به‌عنوان راه موقت پیشنهاد داد. فقط با تأیید من اجرا می‌شود.'); } });
+    const approved = await approveAll({ readSec: 5, onCard: async () => { await say('تا اصلاح کد، ری‌استارت را به‌عنوان راه موقت پیشنهاد داد. فقط با تأیید من اجرا می‌شود.'); } });
     await fast(6, () => waitTurnEnd());
+    if (!approved) {
+      // The agent stopped at a recommendation: the user picks the next step in plain words.
+      await say('پیشنهادش را قبول می‌کنم: راه موقت را اجرا کند و برای ایجنت کدنویس دستور کار بنویسد.');
+      await send('همین کار رو بکن: یه ری‌استارت موقت بزن و برای ایجنت کدنویس دستور کار اصلاح کد رو بنویس.');
+      await approveAll({ readSec: 5, onCard: async () => { await say('کارت تأیید ری‌استارت: فقط با تأیید من اجرا می‌شود.'); } });
+      await fast(6, () => waitTurnEnd());
+    }
     if ((await count('.card.handoff')) > hand6) {
       await say('برای ایجنت کدنویس من یک دستور کار دقیق نوشت: مشکل، شاهد از لیارا، فایل و خط، و اصلاحیهٔ پیشنهادی. فایلش در پوشهٔ پروژه هم ذخیره شد.');
       await show('.card.handoff', 6);

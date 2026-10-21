@@ -146,7 +146,7 @@ async function incident(session, app, text, paths, { runToolByName, say }) {
     return verify(session, app, { runToolByName, say });
   }
 
-  if (top.id === 'memory_leak' || top.id === 'memory_pressure') {
+  if (top.id === 'memory_leak' || top.id === 'memory_pressure' || top.id === 'data_growth') {
     const leak = await findLeak(app, { runToolByName });
     if (leak) {
       await say(`در کد هم دنبال علت گشتم: آرایهٔ \`${leak.name}\` در \`${leak.declared.file}:${leak.declared.line}\` تعریف شده و در \`${leak.grows.file}:${leak.grows.line}\` با هر بازدید بزرگ‌تر می‌شود ولی هیچ‌جا خالی نمی‌شود. یعنی نشت حافظه در کد است و ارتقای پلن فقط مشکل را عقب می‌اندازد.`);

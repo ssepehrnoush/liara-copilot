@@ -10,6 +10,8 @@ export function recordView(req, list) {
     ua: req.headers['user-agent'] || '',
     snapshot: JSON.parse(JSON.stringify(list)),
     alsoViewed: JSON.parse(JSON.stringify(list.slice(0, 60))),
+    raw: JSON.stringify(list),
+    pretty: JSON.stringify(list, null, 2),
     rendered: list.map((p) => `<li>${p.title} | ${p.author} | ${p.description}</li>`).join(''),
   });
 }
