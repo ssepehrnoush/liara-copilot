@@ -133,14 +133,19 @@
         for (const b of bubbles.values()) b.el.classList.remove('typing');
         refreshStatus();
         break;
-      case 'llm_status':
+      case 'llm_status': {
+        const c = $('#modelChip');
         if (!ev.available) {
-          const c = $('#modelChip');
           c.textContent = 'حالت قواعد: مدل زبانی در دسترس نیست';
           c.className = 'chip sim';
           c.title = ev.reason || '';
+        } else if (ev.provider) {
+          c.textContent = modelLabel(ev.model, ev.provider) + (ev.fallback ? (ev.budget ? ' (اعتبار BoxAPI تمام شده)' : ' (پشتیبان)') : '');
+          c.className = `chip ${ev.fallback ? 'sim' : 'muted'}`;
+          c.title = ev.reason || '';
         }
         break;
+      }
       case 'refresh':
         refreshStatus(true);
         break;
@@ -557,13 +562,20 @@
 
   const welcomeClone = $('#welcome');
 
+  const modelLabel = (model, provider) => `مدل: ${String(model || '').split('/').pop()} از ${provider === 'boxapi' ? 'BoxAPI' : 'OpenAI'}`;
+
   async function boot() {
     const cfg = await fetch('/api/config').then((r) => r.json());
     const mc = $('#modeChip');
     mc.textContent = cfg.liaraMode === 'sim' ? 'شبیه‌ساز لیارا (محلی)' : 'متصل به API واقعی لیارا';
     mc.className = `chip ${cfg.liaraMode === 'sim' ? 'sim' : 'real'}`;
-    $('#modelChip').textContent = `مدل: ${cfg.llmModel.split('/').pop()} از ${cfg.llmProvider === 'boxapi' ? 'BoxAPI' : 'OpenAI'}`;
+    $('#modelChip').textContent = modelLabel(cfg.llmModel, cfg.llmProvider);
+    $('#modelChip').title = cfg.llmChain.length > 1 ? `پشتیبان: ${cfg.llmChain.slice(1).join('، ')}` : '';
     if (cfg.llmAvailable === false) handle({ type: 'llm_status', available: false, reason: cfg.llmReason });
+    else if (cfg.llmFallback && cfg.llmActive) {
+      const model = (cfg.llmChain.find((c) => c.startsWith(`${cfg.llmActive}:`)) || '').split(':').slice(1).join(':');
+      handle({ type: 'llm_status', available: true, provider: cfg.llmActive, model, fallback: true, budget: cfg.llmFallback.budget, reason: cfg.llmFallback.failed.map((f) => f.reason).join(' | ') });
+    }
     setKill(cfg.killSwitch);
     try { await api('/api/status'); } catch { return; }
     connect();

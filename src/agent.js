@@ -162,6 +162,20 @@ async function runTool(session, call, ctx) {
 
 export const llmState = { downUntil: 0, reason: null, checkedAt: 0 };
 
+// Tells the UI and the audit log which provider answered, once per change, so a fallback
+// (or an exhausted BoxAPI budget) is never silent.
+function noteProvider(session) {
+  const fb = config.llm.lastFallback;
+  const key = fb ? `${fb.to}:${fb.budget}` : config.llm.active;
+  if (llmState.lastProvider === key) return;
+  const first = llmState.lastProvider === undefined;
+  llmState.lastProvider = key;
+  const p = config.llm.chain.find((x) => x.name === config.llm.active);
+  broadcast('llm_status', { available: true, provider: config.llm.active, model: p?.model, fallback: Boolean(fb), budget: Boolean(fb?.budget), reason: fb?.failed?.map((f) => f.reason).join(' | ').slice(0, 200) });
+  if (fb) audit({ actor: 'agent', kind: 'alert', tool: 'llm', risk: 'auto', summary: fb.budget ? `اعتبار ${fb.failed[0].name === 'boxapi' ? 'BoxAPI' : fb.failed[0].name} تمام شده؛ پاسخ از ${fb.to === 'openai' ? 'OpenAI' : fb.to} (پشتیبان) آمد` : `${fb.failed[0].name === 'boxapi' ? 'BoxAPI' : fb.failed[0].name} جواب نداد؛ پاسخ از ${fb.to === 'openai' ? 'OpenAI' : fb.to} (پشتیبان) آمد`, status: 'error' });
+  else if (!first) audit({ actor: 'agent', kind: 'alert', tool: 'llm', risk: 'auto', summary: `پاسخ‌ها دوباره از ${config.llm.active === 'boxapi' ? 'BoxAPI' : config.llm.active} می‌آید`, status: 'ok' });
+}
+
 // Cheap 1-token call so the UI can say up front whether the model is reachable.
 export async function probeLlm() {
   llmState.checkedAt = Date.now();
@@ -253,6 +267,7 @@ export async function runTurn(session, userText, liara) {
         throw e;
       }
       emit(session, 'assistant_end', { msgId });
+      noteProvider(session);
       session.messages.push(message);
       if (!message.tool_calls?.length) break;
       for (const call of message.tool_calls) {

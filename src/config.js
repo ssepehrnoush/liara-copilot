@@ -30,7 +30,7 @@ const providers = {
   boxapi: {
     baseURL: process.env.BOXAPI_BASE_URL || 'https://ai.boxapi.ir/ai/v1',
     apiKey: process.env.BOXAPI_KEY,
-    model: (provider === 'boxapi' && process.env.LLM_MODEL) || process.env.BOXAPI_MODEL || 'openai/gpt-5.4-mini',
+    model: (provider === 'boxapi' && process.env.LLM_MODEL) || process.env.BOXAPI_MODEL || 'openai/gpt-5.6-sol',
     proxy: process.env.BOXAPI_PROXY || '',
     maxConcurrent: Number(process.env.BOXAPI_MAX_CONCURRENT || 1),
     rpm: Number(process.env.BOXAPI_RPM || 18),
@@ -39,13 +39,14 @@ const providers = {
   openai: {
     baseURL: process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
     apiKey: process.env.OPENAI_API_KEY,
-    model: (provider === 'openai' && process.env.LLM_MODEL) || process.env.OPENAI_MODEL || 'gpt-5.4',
+    model: (provider === 'openai' && process.env.LLM_MODEL) || process.env.OPENAI_MODEL || 'gpt-5.6-sol',
     proxy: process.env.OPENAI_PROXY || process.env.HTTPS_PROXY || process.env.HTTP_PROXY || '',
     fastModel: process.env.LLM_FAST_MODEL || 'gpt-4.1-mini',
   },
 };
 
-const fallbacks = (process.env.LLM_FALLBACK || '').toLowerCase().split(',').map((s) => s.trim()).filter(Boolean);
+// Second choice when the first provider fails (budget, rate limit, timeout, 5xx). "none" turns it off.
+const fallbacks = (process.env.LLM_FALLBACK ?? 'openai').toLowerCase().split(',').map((s) => s.trim()).filter((s) => s && s !== 'none');
 
 const liaraMode = argvSim ? 'sim' : (process.env.LIARA_MODE || 'real').toLowerCase();
 
@@ -65,12 +66,13 @@ export const config = {
   llm: {
     provider,
     ...(providers[provider] || { model: 'none' }),
-    // Chosen provider only, unless LLM_FALLBACK names others (e.g. "openai"). Every call goes to
-    // the sponsor gateway by default; with no model left, the copilot switches to its rule mode.
+    // Chosen provider first (the sponsor gateway BoxAPI), then the LLM_FALLBACK providers that have
+    // a key. With no model left, the copilot switches to its rule mode.
     chain: provider === 'none' ? [] : [provider, ...fallbacks.filter((k) => k !== provider && providers[k])]
       .filter((k) => providers[k]?.apiKey)
       .map((k) => ({ name: k, ...providers[k], model: k === provider ? providers[k].model : (process.env[`${k.toUpperCase()}_MODEL`] || providers[k].model) })),
     active: null,
+    lastFallback: null,
   },
   // Optional passcode for when the copilot itself is hosted publicly.
   passcode: process.env.COPILOT_PASSCODE || '',
@@ -87,6 +89,8 @@ export function publicConfig() {
     hasLiaraToken: Boolean(config.liara.token),
     hasLlmKey: config.llm.chain.length > 0,
     llmChain: config.llm.chain.map((p) => `${p.name}:${p.model}`),
+    llmActive: config.llm.active,
+    llmFallback: config.llm.lastFallback,
     passcodeRequired: Boolean(config.passcode),
   };
 }

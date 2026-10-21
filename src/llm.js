@@ -52,9 +52,14 @@ export async function chat({ messages, tools, onDelta, maxTokens = 2000 }) {
   const chain = config.llm.chain;
   if (!chain.length) throw unavailable('no LLM provider configured');
   let lastErr;
-  for (const p of chain) {
+  const failed = [];
+  for (const [i, p] of chain.entries()) {
     try {
-      const out = await withGate(p, async () => readStream(await open(p, { messages, tools, maxTokens }), onDelta));
+      const out = await withGate(p, async () => readStream(await open(p, { messages, tools, maxTokens, last: i === chain.length - 1 }), onDelta));
+      if (failed.length) {
+        config.llm.lastFallback = { at: Date.now(), to: p.name, model: p.model, failed, budget: failed.some((f) => /402|budget|spending limit/i.test(f.reason)) };
+        console.warn(`[llm] ${failed.map((f) => `${f.name} failed (${f.reason.slice(0, 90)})`).join('; ')} -> answered by ${p.name}:${p.model}`);
+      } else config.llm.lastFallback = null;
       config.llm.active = p.name;
       const u = (llmUsage[p.name] ||= { calls: 0, promptTokens: 0, cachedTokens: 0, completionTokens: 0, costUSD: 0 });
       u.calls++;
@@ -66,13 +71,16 @@ export async function chat({ messages, tools, onDelta, maxTokens = 2000 }) {
     } catch (e) {
       lastErr = e;
       if (!e.unavailable) throw e;
+      failed.push({ name: p.name, reason: e.message });
     }
   }
   throw lastErr;
 }
 
-async function open(p, { messages, tools, maxTokens }) {
+async function open(p, { messages, tools, maxTokens, last = true }) {
   const body = { model: p.model, messages, stream: true };
+  // OpenAI sends token usage on a stream only when asked; BoxAPI always does.
+  if (p.name === 'openai') body.stream_options = { include_usage: true };
   // Newer reasoning-era models reject some sampling params; send only what each family accepts.
   const reasoning = /gpt-([5-9]|\d\d)|(^|\/)o\d|~openai\/gpt-/.test(p.model);
   if (reasoning) body.max_completion_tokens = maxTokens;
@@ -88,7 +96,8 @@ async function open(p, { messages, tools, maxTokens }) {
     body.tool_choice = 'auto';
   }
   let res;
-  const attempts = 5;
+  // With a fallback provider behind this one, give up sooner and let it answer.
+  const attempts = last ? 5 : 3;
   for (let attempt = 0; attempt < attempts; attempt++) {
     try {
       res = await send(p, `${p.baseURL}/chat/completions`, {
@@ -98,7 +107,7 @@ async function open(p, { messages, tools, maxTokens }) {
         signal: AbortSignal.timeout(120000),
       });
     } catch (e) {
-      if (attempt < 2) continue;
+      if (attempt < (last ? 2 : 1)) continue;
       throw unavailable(`${p.name} network error: ${e.cause?.code || e.message}`);
     }
     if (res.ok) return res;
@@ -107,7 +116,7 @@ async function open(p, { messages, tools, maxTokens }) {
       // The BoxAPI key is shared with other apps, so a 429 can come from their traffic:
       // wait as long as the gateway asks (Retry-After), else back off 2, 4, 8, 16 s.
       const after = Number(res.headers.get('retry-after'));
-      const wait = after > 0 ? Math.min(after, 30) * 1000 : 2000 * 2 ** attempt;
+      const wait = after > 0 ? Math.min(after, last ? 30 : 5) * 1000 : 2000 * 2 ** attempt;
       if (attempt < attempts - 1) await new Promise((r) => setTimeout(r, wait + Math.random() * 500));
       continue;
     }
