@@ -6,3 +6,4 @@ data/
 .DS_Store
 demo/**/LIARA_COPILOT_TASK.md
 .claude/
+_share/

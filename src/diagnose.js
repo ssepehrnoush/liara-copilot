@@ -296,16 +296,15 @@ export function latestIncident(app) {
 export async function verifyRecovery(liara, appName, incidentId, { sinceMs } = {}) {
   const inc = (incidentId && incidents.get(incidentId)) || latestIncident(appName);
   const paths = inc?.paths || ['/'];
-  const nowSec = Math.floor(Date.now() / 1000);
   const fromMs = sinceMs || Date.now() - 120000;
   const fromSec = Math.floor(fromMs / 1000);
   const [probe, logs, mem] = await Promise.all([
     httpCheck(liara.appUrl(appName), { paths, samples: 5 }),
     settle(liara.logs(appName, { startSec: fromSec, limit: 300 })),
-    settle(liara.metric(appName, 'memory', nowSec - 5 * 60)),
+    settle(liara.metricsSummary(appName)),
   ]);
   const errorsAfter = logs.ok ? logs.v.filter((l) => (l.t || 0) >= fromMs && ERROR_RE.test(l.line) && !/\b(GET|POST)\s+\S+\s+[23]\d\d\b/.test(l.line)).length : null;
-  const memNow = mem.ok && mem.v.length ? Math.round(mem.v[mem.v.length - 1].v / MB) : null;
+  const memNow = mem.ok && mem.v.memoryBytes ? Math.round(mem.v.memoryBytes / MB) : null;
   const before = inc?.baseline || {};
   const okBefore = before.probe?.total ? Math.round((before.probe.ok / before.probe.total) * 100) : null;
   const okAfter = probe.total ? Math.round((probe.ok / probe.total) * 100) : 0;

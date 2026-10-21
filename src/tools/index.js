@@ -489,7 +489,7 @@ export const tools = [
       return {
         titleFa: 'ری‌استارت سرویس',
         summaryFa: `کانتینرهای ${a.app} خاموش و دوباره روشن می‌شوند.`,
-        changes: [{ label: 'وضعیت', before: app.status || 'در حال اجرا', after: 'ری‌استارت و اجرای دوباره' }],
+        changes: [{ label: 'وضعیت', before: { RUNNING: 'در حال اجرا', STOPPED: 'خاموش', RESTARTING: 'در حال ری‌استارت' }[app.status] || app.status || 'در حال اجرا', after: 'ری‌استارت و اجرای دوباره' }],
         impacts: [
           { kind: 'downtime', text: app.zeroDowntime ? 'با استقرار بدون قطعی، قطعی ناچیز است.' : 'حدود ۱۰ تا ۳۰ ثانیه سایت در دسترس نیست.' },
           { kind: 'note', text: 'راه‌حل موقت است: اگر علت نشت حافظه در کد باشد، مشکل دوباره برمی‌گردد.' },

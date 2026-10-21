@@ -41,12 +41,15 @@ const providers = {
   },
 };
 
+const liaraMode = argvSim ? 'sim' : (process.env.LIARA_MODE || 'real').toLowerCase();
+
 export const config = {
   root: ROOT,
-  dataDir: path.join(ROOT, 'data'),
+  // Separate state per mode so simulator apps never mix with real ones.
+  dataDir: path.join(ROOT, 'data', liaraMode),
   port: Number(process.env.PORT || process.env.COPILOT_PORT || 4100),
   // "real" talks to api.liara.ir; "sim" runs apps locally behind the same interface.
-  liaraMode: argvSim ? 'sim' : (process.env.LIARA_MODE || 'real').toLowerCase(),
+  liaraMode,
   liara: {
     baseURL: process.env.LIARA_API_URL || 'https://api.liara.ir',
     token: process.env.LIARA_API_TOKEN,

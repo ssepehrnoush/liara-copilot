@@ -259,7 +259,7 @@
       h('div', { class: 'sub' }, `منابع بررسی‌شده: وضعیت سرویس، ${faNum(ev.releases?.length)} ریلیز اخیر، ${faNum(ev.logs?.lines)} خط لاگ، ${faNum(ev.events?.total)} رویداد، نمودار CPU و رم، و ${faNum(p.total)} درخواست زنده.`),
       h('div', { class: 'stats' },
         stat(succ === null ? '-' : `${faNum(succ)}٪`, 'درخواست موفق', succ === 100 ? 'good' : succ >= 50 ? 'warn' : 'bad'),
-        stat(p.p50ms ? `${faNum(p.p50ms)}ms` : '-', 'زمان پاسخ میانه', p.p50ms > 1500 ? 'bad' : p.p50ms > 600 ? 'warn' : 'good'),
+        stat(p.p50ms ? `${faNum(p.p50ms)}ms` : (p.paths || []).some((x) => x.failures) ? 'تایم‌اوت' : '-', 'زمان پاسخ میانه', !p.p50ms || p.p50ms > 1500 ? 'bad' : p.p50ms > 600 ? 'warn' : 'good'),
         stat(faNum(ev.logs?.errors), 'خطا در لاگ', ev.logs?.errors ? 'bad' : 'good'),
         stat(memPct === null || memPct === undefined ? '-' : `${faNum(memPct)}٪`, `رم از ${faNum(ev.limits?.ramMB)}MB`, memPct >= 85 ? 'bad' : memPct >= 65 ? 'warn' : 'good'),
         ev.cpu?.maxPctOfPlan !== undefined && ev.cpu?.maxPctOfPlan !== null ? stat(`${faNum(ev.cpu.maxPctOfPlan)}٪`, 'بیشینهٔ CPU', ev.cpu.maxPctOfPlan >= 85 ? 'bad' : 'good') : null,
@@ -283,7 +283,7 @@
       h('table', { class: 'changes' },
         h('tr', {}, h('th', {}, 'شاخص'), h('th', {}, 'قبل'), h('th', {}, 'بعد')),
         row('درخواست موفق', b.successPct !== undefined && b.successPct !== null ? `${faNum(b.successPct)}٪` : '-', `${faNum(a.successPct)}٪`),
-        row('زمان پاسخ میانه', b.p50ms ? `${faNum(b.p50ms)}ms` : '-', a.p50ms ? `${faNum(a.p50ms)}ms` : '-'),
+        row('زمان پاسخ میانه', b.p50ms ? `${faNum(b.p50ms)}ms` : b.successPct === 0 ? 'تایم‌اوت یا خطا' : '-', a.p50ms ? `${faNum(a.p50ms)}ms` : '-'),
         row('خطا در لاگ', faNum(b.errorsInLogs), a.errorsInLogsSinceFix === null ? '-' : `${faNum(a.errorsInLogsSinceFix)} (بعد از اصلاح)`),
         row('مصرف رم', b.memoryMB ? `${faNum(b.memoryMB)}MB` : '-', a.memoryMB ? `${faNum(a.memoryMB)}MB` : '-'),
       ),
@@ -376,7 +376,7 @@
     el.querySelectorAll('button, input').forEach((b) => { b.disabled = true; });
     const r = el.querySelector('.resolved');
     r.classList.remove('hidden');
-    r.textContent = action === 'approve' ? '✓ تأیید شد؛ در حال اجرا…' : action === 'retry' ? '↻ دوباره بررسی شد' : '✗ رد شد؛ هیچ تغییری انجام نشد.';
+    r.textContent = action === 'approve' ? '✓ تأیید شد و اجرا شد (نتیجه در ردیف بعدی)' : action === 'retry' ? '↻ دوباره بررسی شد' : '✗ رد شد؛ هیچ تغییری انجام نشد.';
     el.querySelector('.actions')?.classList.add('hidden');
   }
 

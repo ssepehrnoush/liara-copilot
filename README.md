@@ -55,7 +55,8 @@ flowchart LR
 | موجودی کیف پول | `GET /v1/billing` |
 | کاتالوگ پلن‌ها و بسته‌ها با قیمت | `GET /v1/me` (`plans.projects`، `plans.projectBundlePlans`) |
 | فهرست و جزئیات اپ‌ها (وضعیت، پلن، متغیرها) | `GET /v1/projects`، `GET /v1/projects/{name}` |
-| ساخت اپ | `POST /v1/projects` با `name, platform, planID, bundlePlanID` |
+| شبکهٔ خصوصی (لازمهٔ ساخت اپ) | `GET /v1/networks`، و اگر نبود `POST /v1/networks` |
+| ساخت اپ | `POST /v1/projects` با `name, platform, planID, bundlePlanID, network` |
 | آپلود سورس (tar.gz) | `POST /v2/projects/{name}/sources` |
 | ساخت ریلیز | `POST /v2/projects/{name}/releases` |
 | وضعیت و لاگ بیلد | `GET /v1/releases/{id}`، `GET /v2/releases/{id}/build-logs` |
