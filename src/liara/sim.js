@@ -17,7 +17,7 @@ const PRELOAD = path.join(path.dirname(fileURLToPath(import.meta.url)), 'sim-pre
 // Same numbers as the real /v1/me catalog (checked 2026-10-21).
 const bundle = (id, monthly, hourly) => ({
   id, monthly, hourly, zeroDowntime: id !== 'basic', rollback: true,
-  logsRetentionDays: { basic: 7, standard: 30, pro: 60 }[id], metricsRetentionDays: { basic: 7, standard: 30, pro: 60 }[id], buildTimeoutMin: 10, maxSourceMB: 256,
+  logsRetentionDays: { basic: 7, standard: 30, pro: 60 }[id], metricsRetentionDays: { basic: 7, standard: 30, pro: 60 }[id], buildTimeoutMin: { basic: 5, standard: 15, pro: 60 }[id], maxSourceMB: 256,
 });
 const CATALOG = {
   plans: [

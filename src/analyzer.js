@@ -168,7 +168,13 @@ export function recommendPlan(analysis, catalog) {
   }
   if (analysis.sizeMB > 150) why.push('حجم پروژه زیاد است؛ فایل‌های اضافه را در .gitignore بگذارید');
   const plan = byId[target] || plans[0] || null;
-  const bundle = plan?.bundles?.find((b) => b.id === 'basic') || plan?.bundles?.[0] || null;
+  // The basic bundle stops builds after 5 minutes; frontend builds, Docker images and big
+  // dependency trees need the next bundle up.
+  const heavyBuild = ['next', 'react', 'vue', 'angular', 'docker', 'laravel', 'dotnet'].includes(analysis.platform) || analysis.dependencies.length > 25 || analysis.heavyDeps.length > 0;
+  const needMin = heavyBuild ? 10 : 5;
+  const bundles = [...(plan?.bundles || [])].sort((a, b) => a.monthly - b.monthly);
+  const bundle = bundles.find((b) => (b.buildTimeoutMin || 0) >= needMin) || bundles[0] || null;
+  if (bundle && bundle.id !== 'basic' && heavyBuild) why.push(`بیلد این نوع پروژه ممکن است از ۵ دقیقهٔ بستهٔ basic بیشتر شود، پس بستهٔ ${bundle.id} با ${Number(bundle.buildTimeoutMin).toLocaleString('fa-IR')} دقیقه زمان بیلد`);
   return {
     planID: plan?.id || target,
     bundlePlanID: bundle?.id || 'basic',
