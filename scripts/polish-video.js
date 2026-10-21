@@ -34,28 +34,27 @@ const mainEnd = JSON.parse(fs.readFileSync(path.join(REC, 'timeline.json'), 'utf
 const totalMain = (mainEnd.end - mainEnd.frames[0].t) / 1000;
 const chapters = [
   { from: 0, to: shotStart(3), badge: null },
-  { from: shotStart(3), to: shotStart(8), n: 1, title: 'دیپلوی از صفر', sub: 'از «این پروژهٔ من است» تا سایت زنده روی لیارا', icon: 'ch1-deploy.png' },
-  { from: shotStart(8), to: shotStart(14), n: 2, title: 'خطای ۵۰۰ و رفعش', sub: 'پیدا کردن علت از لاگ واقعی و اصلاح با تأیید', icon: 'ch2-error.png' },
-  { from: shotStart(14), to: shotStart(16), n: 3, title: 'حملهٔ تزریق دستور', sub: 'متنی در لاگ که می‌خواهد به هوش مصنوعی دستور بدهد', icon: 'ch3-shield.png' },
-  { from: shotStart(16), to: shotStart(22), n: 4, title: 'کندی و نشت حافظه', sub: 'از هشدار ناظر تا خط مقصر در کد', icon: 'ch4-memory.png' },
-  { from: shotStart(22), to: totalMain, n: 5, title: 'گزارش و توقف اضطراری', sub: 'همه‌چیز ثبت می‌شود، با یک کلیک فقط‌خواندنی', icon: 'ch5-audit.png' },
+  { from: shotStart(3), to: shotStart(8), n: 1, title: 'دیپلوی از صفر', sub: 'از معرفی پروژه تا سایت آماده روی لیارا', icon: 'ch1-deploy.png' },
+  { from: shotStart(8), to: shotStart(14), n: 2, title: 'خطای ۵۰۰ و رفعش', sub: 'پیدا کردن علت از روی لاگ و رفعش با تأیید کاربر', icon: 'ch2-error.png' },
+  { from: shotStart(14), to: shotStart(16), n: 3, title: 'حملهٔ تزریق دستور', sub: 'وقتی کسی از طریق لاگ می‌خواهد به هوش مصنوعی دستور بدهد', icon: 'ch3-shield.png' },
+  { from: shotStart(16), to: shotStart(22), n: 4, title: 'کندی و نشت حافظه', sub: 'از هشدار کندی تا پیدا کردن مشکل در کد', icon: 'ch4-memory.png' },
+  { from: shotStart(22), to: totalMain, n: 5, title: 'گزارش و توقف اضطراری', sub: 'ثبت همهٔ کارها و دکمهٔ توقف', icon: 'ch5-audit.png' },
 ];
 const CARD = { intro: 4.5, chapter: 2.6, outro: 5.5 };
 
 // ---------------------------------------------------------------- 1) subtitles: one sentence at a time
+// Each sentence is one subtitle, so the text never changes mid-sentence. A long sentence is
+// shown on two lines, broken at the comma (or else the space) nearest the middle.
 function sentences(text) {
-  const parts = text.split(/(?<=[.!؟?])\s+/).filter(Boolean);
-  const out = [];
-  for (const p of parts) {
-    if (p.length <= 78) { out.push(p); continue; }
-    // Long sentence: break at the clause boundary nearest the middle.
-    const marks = [...p.matchAll(/[،:؛]\s/g)].map((m) => m.index + 1);
+  return text.split(/(?<=[.!؟?])\s+/).filter(Boolean).map((p) => {
+    if (p.length <= 78) return [p];
     const mid = p.length / 2;
-    const cut = marks.sort((a, b) => Math.abs(a - mid) - Math.abs(b - mid))[0];
-    if (cut && cut > 15 && cut < p.length - 15) out.push(p.slice(0, cut).trim(), p.slice(cut).trim());
-    else out.push(p);
-  }
-  return out;
+    const near = (re) => [...p.matchAll(re)].map((m) => m.index + 1).filter((i) => i > 20 && i < p.length - 20)
+      .sort((a, b) => Math.abs(a - mid) - Math.abs(b - mid))[0];
+    const comma = near(/[،:؛]\s/g);
+    const cut = comma && Math.abs(comma - mid) < p.length / 4 ? comma : near(/\s/g);
+    return cut ? [p.slice(0, cut).trim(), p.slice(cut).trim()] : [p];
+  });
 }
 const ts = (s) => {
   const h = Math.floor(s / 3600);
@@ -68,11 +67,12 @@ const rtl = (text) => `‫${text}‬`;
 const events = [];
 for (const n of narration) {
   const parts = sentences(n.say);
-  const total = parts.reduce((a, p) => a + p.length, 0);
+  const len = (lines) => lines.join(' ').length;
+  const total = parts.reduce((a, p) => a + len(p), 0);
   let t = n.start;
   for (const p of parts) {
-    const d = (p.length / total) * n.dur;
-    events.push(`Dialogue: 0,${ts(t)},${ts(t + d - 0.02)},Fa,,0,0,0,,${rtl(p)}`);
+    const d = (len(p) / total) * n.dur;
+    events.push(`Dialogue: 0,${ts(t)},${ts(t + d - 0.02)},Fa,,0,0,0,,${p.map(rtl).join('\\N')}`);
     t += d;
   }
 }
@@ -138,9 +138,9 @@ ${c.bar ? '<div class="bar"><i></i></div>' : ''}
 </body></html>`;
 
 const cards = [
-  { id: 'intro', dur: CARD.intro, icon: 'hero.png', kicker: 'چالش لیارا · هکاتون Agentic AI استارکوچ', title: 'لیارا کوپایلت', sub: 'از «این پروژهٔ من است» تا سایت زنده، و بعد مراقبت از آن', chips: ['API واقعی لیارا', 'هر تغییر با تأیید شما', 'عیب‌یابی با شاهد'] },
+  { id: 'intro', dur: CARD.intro, icon: 'hero.png', kicker: 'چالش لیارا · هکاتون Agentic AI استارکوچ', title: 'لیارا کوپایلت', sub: 'دستیاری که به برنامه‌نویس‌ها کمک می‌کند سایتشان را روی لیارا منتشر و نگهداری کنند', chips: ['اتصال مستقیم به لیارا', 'هر تغییر با تأیید کاربر', 'پیدا کردن علت خطا'] },
   ...chapters.filter((c) => c.n).map((c) => ({ id: `ch${c.n}`, dur: CARD.chapter, icon: c.icon, kicker: `قسمت ${['', 'اول', 'دوم', 'سوم', 'چهارم', 'پنجم'][c.n]}`, num: fa(c.n), title: c.title, sub: c.sub, bar: true })),
-  { id: 'outro', dur: CARD.outro, icon: 'hero.png', kicker: 'کد، مستندات و چک‌لیست امنیت', title: 'لیارا کوپایلت', url: 'github.com/ssepehrnoush/liara-copilot', chips: ['دیپلوی از صفر', 'عیب‌یابی ۵۰۰ و کندی', 'ضد تزریق دستور', 'توقف اضطراری'] },
+  { id: 'outro', dur: CARD.outro, icon: 'hero.png', kicker: 'کد و مستندات پروژه', title: 'لیارا کوپایلت', url: 'github.com/ssepehrnoush/liara-copilot', chips: ['دیپلوی از صفر', 'عیب‌یابی ۵۰۰ و کندی', 'ضد تزریق دستور', 'توقف اضطراری'] },
 ];
 
 const browser = await chromium.launch({ executablePath: CHROME, headless: true });
