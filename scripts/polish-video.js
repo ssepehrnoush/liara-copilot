@@ -2,6 +2,8 @@
 // OpenArt, Persian text and motion rendered here), one-sentence subtitles, a chapter badge,
 // and soft fades between parts.
 //   node scripts/polish-video.js --rec _share/rec-final --art _share/art --narration _share/defense/narration-timed.json --out _share/video
+// With --voice DIR (clips from scripts/voice-over.js), the subtitles come from the recording's
+// own cues, silent stretches are squeezed, and the voice clips become the soundtrack.
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -13,6 +15,7 @@ const opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] :
 const REC = path.resolve(opt('--rec', '_share/rec-final'));
 const ART = path.resolve(opt('--art', '_share/art'));
 const NAR = path.resolve(opt('--narration', '_share/defense/narration-timed.json'));
+const VOICE = opt('--voice', '') && path.resolve(opt('--voice'));
 const OUT = path.resolve(opt('--out', '_share/video'));
 const WORK = path.join(OUT, 'work');
 const CHROME = opt('--chrome', 'C:/Program Files/Google/Chrome/Application/chrome.exe');
@@ -28,17 +31,66 @@ const ff = (argv, label) => {
 const ENC = ['-r', String(FPS), '-c:v', 'libx264', '-preset', 'medium', '-crf', '19', '-pix_fmt', 'yuv420p'];
 
 // ---------------------------------------------------------------- chapters (main-video seconds)
-const narration = JSON.parse(fs.readFileSync(NAR, 'utf8'));
-const shotStart = (i) => narration[i - 1].start; // 1-based shot index
-const mainEnd = JSON.parse(fs.readFileSync(path.join(REC, 'timeline.json'), 'utf8'));
-const totalMain = (mainEnd.end - mainEnd.frames[0].t) / 1000;
+const timeline = JSON.parse(fs.readFileSync(path.join(REC, 'timeline.json'), 'utf8'));
+const t0 = timeline.frames[0].t;
+let totalMain = (timeline.end - t0) / 1000;
+let narration;
+let framesList = path.join(REC, 'frames.txt');
+let chapterAt;
+if (!VOICE) {
+  narration = JSON.parse(fs.readFileSync(NAR, 'utf8'));
+  chapterAt = [3, 8, 14, 16, 22].map((i) => narration[i - 1].start); // 1-based shot index
+} else {
+  // Voice mode: keep each cue at real speed while its clip plays and squeeze the silent rest
+  // of the cue (to a third, at least 1.2 s), so nothing on screen waits without a reason.
+  const clips = JSON.parse(fs.readFileSync(path.join(VOICE, 'manifest.json'), 'utf8'));
+  const cues = timeline.cues.map((c) => ({ id: c.id, text: c.text, start: (c.start - t0) / 1000, end: (c.end - t0) / 1000, clip: clips[c.text] }));
+  const knots = [[0, 0]];
+  const squeeze = (b) => {
+    const [a, A] = knots.at(-1);
+    const len = b - a;
+    knots.push([b, A + (len <= 1.2 ? len : Math.max(1.2, len / 3))]);
+  };
+  const keep = (b) => { const [a, A] = knots.at(-1); knots.push([b, A + (b - a)]); };
+  squeeze(cues[0].start);
+  for (const c of cues) {
+    keep(Math.min(c.end, c.start + (c.clip ? c.clip.dur + 0.45 : c.end - c.start)));
+    squeeze(c.end);
+  }
+  squeeze(totalMain);
+  const warp = (t) => {
+    for (let i = 1; i < knots.length; i++) {
+      const [a, A] = knots[i - 1];
+      const [b, B] = knots[i];
+      if (t <= b) return b === a ? A : A + ((t - a) / (b - a)) * (B - A);
+    }
+    return knots.at(-1)[1];
+  };
+  const list = [];
+  timeline.frames.forEach((f, i) => {
+    const a = (f.t - t0) / 1000;
+    const b = ((timeline.frames[i + 1]?.t ?? timeline.end) - t0) / 1000;
+    list.push(`file '${f.path || `frames/${f.file}`}'`, `duration ${Math.max(0.001, warp(b) - warp(a)).toFixed(4)}`);
+  });
+  framesList = path.join(REC, 'frames-voice.txt');
+  fs.writeFileSync(framesList, list.join('\n'));
+  const before = totalMain;
+  totalMain = warp(totalMain);
+  narration = cues.map((c) => ({ id: c.id, screen: '', say: c.text, start: warp(c.start), dur: warp(c.end) - warp(c.start), voice: c.clip && { file: path.join(VOICE, c.clip.file), dur: c.clip.dur } }));
+  const at = (id) => narration.find((n) => n.id === id)?.start;
+  chapterAt = ['ask-deploy', 'v2', 'injection', 'load', 'audit'].map(at);
+  console.log(`voice mode: ${cues.length} cues, main video ${Math.round(before)} s -> ${Math.round(totalMain)} s`);
+}
+const CHAPTERS = [
+  { n: 1, title: 'دیپلوی از صفر', sub: 'از معرفی پروژه تا سایت آماده روی لیارا', icon: 'ch1-deploy.png' },
+  { n: 2, title: 'خطای ۵۰۰ و رفعش', sub: 'پیدا کردن علت از روی لاگ و رفعش با تأیید کاربر', icon: 'ch2-error.png' },
+  { n: 3, title: 'حملهٔ تزریق دستور', sub: 'وقتی کسی از طریق لاگ می‌خواهد به هوش مصنوعی دستور بدهد', icon: 'ch3-shield.png' },
+  { n: 4, title: 'کندی و نشت حافظه', sub: 'از هشدار کندی تا پیدا کردن مشکل در کد', icon: 'ch4-memory.png' },
+  { n: 5, title: 'گزارش و توقف اضطراری', sub: 'ثبت همهٔ کارها و دکمهٔ توقف', icon: 'ch5-audit.png' },
+].map((c, i) => ({ ...c, from: chapterAt[i] })).filter((c) => c.from !== undefined); // a scene that was not recorded has no chapter
 const chapters = [
-  { from: 0, to: shotStart(3), badge: null },
-  { from: shotStart(3), to: shotStart(8), n: 1, title: 'دیپلوی از صفر', sub: 'از معرفی پروژه تا سایت آماده روی لیارا', icon: 'ch1-deploy.png' },
-  { from: shotStart(8), to: shotStart(14), n: 2, title: 'خطای ۵۰۰ و رفعش', sub: 'پیدا کردن علت از روی لاگ و رفعش با تأیید کاربر', icon: 'ch2-error.png' },
-  { from: shotStart(14), to: shotStart(16), n: 3, title: 'حملهٔ تزریق دستور', sub: 'وقتی کسی از طریق لاگ می‌خواهد به هوش مصنوعی دستور بدهد', icon: 'ch3-shield.png' },
-  { from: shotStart(16), to: shotStart(22), n: 4, title: 'کندی و نشت حافظه', sub: 'از هشدار کندی تا پیدا کردن مشکل در کد', icon: 'ch4-memory.png' },
-  { from: shotStart(22), to: totalMain, n: 5, title: 'گزارش و توقف اضطراری', sub: 'ثبت همهٔ کارها و دکمهٔ توقف', icon: 'ch5-audit.png' },
+  { from: 0, to: CHAPTERS[0].from, badge: null },
+  ...CHAPTERS.map((c, i) => ({ ...c, to: CHAPTERS[i + 1]?.from ?? totalMain })),
 ];
 const CARD = { intro: 4.5, chapter: 2.6, outro: 5.5 };
 
@@ -70,8 +122,10 @@ for (const n of narration) {
   const len = (lines) => lines.join(' ').length;
   const total = parts.reduce((a, p) => a + len(p), 0);
   let t = n.start;
-  for (const p of parts) {
-    const d = (len(p) / total) * n.dur;
+  // With a voice clip, sentences follow the clip; the last one stays up until the next cue.
+  const spoken = n.voice ? Math.min(n.dur, n.voice.dur + 0.2) : n.dur;
+  for (const [k, p] of parts.entries()) {
+    const d = k === parts.length - 1 ? n.start + n.dur - t : (len(p) / total) * spoken;
     events.push(`Dialogue: 0,${ts(t)},${ts(t + d - 0.02)},Fa,,0,0,0,,${p.map(rtl).join('\\N')}`);
     t += d;
   }
@@ -92,7 +146,7 @@ const ass = [
 fs.writeFileSync(path.join(WORK, 'polish.ass'), ass);
 
 // Main video with the new subtitles (frames come from the recording).
-const frames = path.join(REC, 'frames.txt').replace(/\\/g, '/');
+const frames = framesList.replace(/\\/g, '/');
 const esc = (p) => p.replace(/\\/g, '/').replace(/^([A-Za-z]):/, '$1\\:');
 const fontsdir = esc(path.resolve('node_modules/vazirmatn/fonts/ttf'));
 const assP = esc(path.join(WORK, 'polish.ass'));
@@ -185,12 +239,22 @@ chapters.forEach((c, i) => {
 });
 parts.push('card-outro.mp4');
 fs.writeFileSync(path.join(WORK, 'parts.txt'), parts.map((p) => `file '${p}'`).join('\n'));
-ff(['-f', 'concat', '-safe', '0', '-i', 'parts.txt', ...ENC, '-movflags', '+faststart', path.join(OUT, 'liara-copilot-demo-final.mp4')], 'concat');
+const FINAL = path.join(OUT, 'liara-copilot-demo-final.mp4');
+ff(['-f', 'concat', '-safe', '0', '-i', 'parts.txt', ...ENC, '-movflags', '+faststart', VOICE ? path.join(WORK, 'silent.mp4') : FINAL], 'concat');
 
 // Narration times in the final video, for the voice-over sheet.
 const finalNar = narration.map((n) => {
-  const o = offsets.find((x) => n.start >= x.from - 0.01 && n.start < x.to);
+  const o = offsets.find((x) => n.start >= x.from - 0.01 && n.start < x.to) || offsets.at(-1);
   return { ...n, finalStart: o.at + (n.start - o.from) };
 });
+if (VOICE) {
+  // Soundtrack: every clip at its cue's place in the final cut.
+  const voiced = finalNar.filter((n) => n.voice);
+  const inputs = voiced.flatMap((n) => ['-i', n.voice.file]);
+  const graph = voiced.map((n, i) => `[${i}:a]aresample=48000,adelay=${Math.round(n.finalStart * 1000)}:all=1[a${i}]`).join(';')
+    + `;${voiced.map((_, i) => `[a${i}]`).join('')}amix=inputs=${voiced.length}:normalize=0:dropout_transition=0,apad,atrim=0:${(clock + CARD.outro).toFixed(3)},loudnorm=I=-16:TP=-1.5[out]`;
+  ff([...inputs, '-filter_complex', graph, '-map', '[out]', '-ac', '2', 'voice.wav'], 'voice mix');
+  ff(['-i', 'silent.mp4', '-i', 'voice.wav', '-map', '0:v', '-map', '1:a', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '160k', '-shortest', '-movflags', '+faststart', FINAL], 'mux');
+}
 fs.writeFileSync(path.join(OUT, 'narration-final.json'), JSON.stringify({ cards: { intro: [0, CARD.intro], chapters: offsets.filter((_, i) => chapters[i].n).map((o, k) => ({ n: k + 1, title: chapters.filter((c) => c.n)[k].title, at: o.at - CARD.chapter, dur: CARD.chapter })), outro: [clock, CARD.outro] }, shots: finalNar, total: clock + CARD.outro }, null, 1));
 console.log(`done: ${path.join(OUT, 'liara-copilot-demo-final.mp4')} (${Math.round(clock + CARD.outro)} s)`);

@@ -10,7 +10,9 @@ import path from 'node:path';
 const args = process.argv.slice(2);
 const outIdx = args.indexOf('--out');
 const out = path.resolve(args[outIdx + 1]);
-const parts = args.filter((_, i) => i !== outIdx && i !== outIdx + 1);
+// --keep: no squeezing here (scripts/polish-video.js --voice squeezes around the voice clips).
+const KEEP_ALL = args.includes('--keep');
+const parts = args.filter((a, i) => i !== outIdx && i !== outIdx + 1 && a !== '--keep');
 const minDur = (text) => Math.max(2500, text.length * 45);
 const KEEP = 10000;
 
@@ -34,7 +36,7 @@ for (const spec of parts) {
     const e = Math.min(c.end ?? tl.end, hi);
     if (e <= s) continue;
     const target = Math.max(minDur(c.text), 14000);
-    if (e - s > target + 2000) {
+    if (!KEEP_ALL && e - s > target + 2000) {
       segs.push([s, s + KEEP, 1], [s + KEEP, e, (target - KEEP) / (e - s - KEEP)]);
     } else segs.push([s, e, 1]);
   }
@@ -56,7 +58,7 @@ for (const spec of parts) {
     const s = Math.max(c.start, lo);
     const e = Math.min(c.end ?? tl.end, hi);
     if (e - s < 300) continue;
-    cues.push({ start: offset + map(s), end: offset + map(e), text: c.text });
+    cues.push({ start: offset + map(s), end: offset + map(e), text: c.text, ...(c.id && { id: c.id }) });
   }
   offset += map(hi) + 40;
   console.log(`${dir}: ${Math.round((hi - lo) / 1000)} s -> ${Math.round(map(hi) / 1000)} s`);

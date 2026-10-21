@@ -198,6 +198,7 @@ scripts/e2e.js       اجرای یک گفتگوی کامل از خط فرمان 
 scripts/record-demo.js, build-video.js, merge-recordings.js
                      ضبط خودکار ویدیوی دمو از یک اجرای واقعی با زیرنویس فارسی
 scripts/polish-video.js  ادیت نهایی: کارت‌های متحرک شروع و قسمت‌ها، زیرنویس جمله‌به‌جمله
+scripts/voice-over.js    صدای راوی با text-to-speech از روی scripts/demo-narration.json
 test/                تست‌های واحد: تحلیل پروژه، انتخاب پلن، ماسک رازها، تشخیص تزریق، رتبه‌بندی علت‌ها
 assets/              دموی متحرک و تصویرهای رابط
 ```
