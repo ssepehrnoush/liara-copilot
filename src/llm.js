@@ -43,7 +43,10 @@ function unavailable(msg) {
   return e;
 }
 
-// Try each configured provider in order (BoxAPI first, then OpenAI if its key exists).
+// Running totals since start, per provider (BoxAPI reports the cost of each call in usage).
+export const llmUsage = {};
+
+// Try each configured provider in order (BoxAPI, then any LLM_FALLBACK provider).
 // A provider that is out of budget, blocked or misconfigured is skipped for this call.
 export async function chat({ messages, tools, onDelta, maxTokens = 2000 }) {
   const chain = config.llm.chain;
@@ -53,6 +56,12 @@ export async function chat({ messages, tools, onDelta, maxTokens = 2000 }) {
     try {
       const out = await withGate(p, async () => readStream(await open(p, { messages, tools, maxTokens }), onDelta));
       config.llm.active = p.name;
+      const u = (llmUsage[p.name] ||= { calls: 0, promptTokens: 0, cachedTokens: 0, completionTokens: 0, costUSD: 0 });
+      u.calls++;
+      u.promptTokens += out.usage?.prompt_tokens || 0;
+      u.cachedTokens += out.usage?.prompt_tokens_details?.cached_tokens || 0;
+      u.completionTokens += out.usage?.completion_tokens || 0;
+      u.costUSD += out.usage?.cost || 0;
       return out;
     } catch (e) {
       lastErr = e;
@@ -77,7 +86,8 @@ async function open(p, { messages, tools, maxTokens }) {
     body.tool_choice = 'auto';
   }
   let res;
-  for (let attempt = 0; attempt < 3; attempt++) {
+  const attempts = 5;
+  for (let attempt = 0; attempt < attempts; attempt++) {
     try {
       res = await send(p, `${p.baseURL}/chat/completions`, {
         method: 'POST',
@@ -92,7 +102,11 @@ async function open(p, { messages, tools, maxTokens }) {
     if (res.ok) return res;
     const txt = await res.text();
     if (res.status === 429 || res.status >= 500) {
-      await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
+      // The BoxAPI key is shared with other apps, so a 429 can come from their traffic:
+      // wait as long as the gateway asks (Retry-After), else back off 2, 4, 8, 16 s.
+      const after = Number(res.headers.get('retry-after'));
+      const wait = after > 0 ? Math.min(after, 30) * 1000 : 2000 * 2 ** attempt;
+      if (attempt < attempts - 1) await new Promise((r) => setTimeout(r, wait + Math.random() * 500));
       continue;
     }
     const err = new Error(`${p.name} ${res.status}: ${txt.slice(0, 300)}`);

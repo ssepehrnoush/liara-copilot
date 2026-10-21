@@ -8,6 +8,7 @@ import { LiaraSim } from './liara/sim.js';
 import { getSession, runTurn, resolveApproval, emit, broadcast, llmState, probeLlm, rejectAllPending } from './agent.js';
 import { killSwitch, setKillSwitch } from './safety.js';
 import { audit } from './audit.js';
+import { llmUsage } from './llm.js';
 import { recentAudit, auditBus } from './audit.js';
 import { managedApps, canModify, appInfo } from './scope.js';
 import { startWatcher, healthSnapshot } from './watcher.js';
@@ -35,7 +36,7 @@ app.use('/api', (req, res, next) => {
   return ok ? next() : res.status(401).json({ error: 'auth' });
 });
 
-app.get('/api/config', (_req, res) => res.json({ ...publicConfig(), llmAvailable: !(llmState.downUntil > Date.now()), llmReason: llmState.reason, killSwitch: killSwitch() }));
+app.get('/api/config', (_req, res) => res.json({ ...publicConfig(), llmAvailable: !(llmState.downUntil > Date.now()), llmReason: llmState.reason, llmUsage, killSwitch: killSwitch() }));
 
 // Emergency stop: from now on only read-only tools run; open approval cards are rejected.
 app.post('/api/killswitch', (req, res) => {

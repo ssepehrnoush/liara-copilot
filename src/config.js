@@ -45,6 +45,8 @@ const providers = {
   },
 };
 
+const fallbacks = (process.env.LLM_FALLBACK || '').toLowerCase().split(',').map((s) => s.trim()).filter(Boolean);
+
 const liaraMode = argvSim ? 'sim' : (process.env.LIARA_MODE || 'real').toLowerCase();
 
 export const config = {
@@ -63,8 +65,9 @@ export const config = {
   llm: {
     provider,
     ...(providers[provider] || { model: 'none' }),
-    // Fallback order: chosen provider first, then any other provider that has a key.
-    chain: provider === 'none' ? [] : [provider, ...Object.keys(providers).filter((k) => k !== provider)]
+    // Chosen provider only, unless LLM_FALLBACK names others (e.g. "openai"). Every call goes to
+    // the sponsor gateway by default; with no model left, the copilot switches to its rule mode.
+    chain: provider === 'none' ? [] : [provider, ...fallbacks.filter((k) => k !== provider && providers[k])]
       .filter((k) => providers[k]?.apiKey)
       .map((k) => ({ name: k, ...providers[k], model: k === provider ? providers[k].model : (process.env[`${k.toUpperCase()}_MODEL`] || providers[k].model) })),
     active: null,

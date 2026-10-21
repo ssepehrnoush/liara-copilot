@@ -6,7 +6,7 @@
 
 <p align="center"><img src="assets/demo.svg" alt="Animated terminal demo: HTTP 500 on checkout, diagnosis from logs, approval card, fix on Liara, verified" width="780"></p>
 
-A captured run (simulator backend, model gpt-5.4): the checkout page returns HTTP 500. The copilot reads the logs and ranks a missing `PAYMENT_API_KEY` first (93%), because the error starts right after the last release. It then shows an approval card with a password field, sets the variable on Liara and probes again: success goes from 67% to 100%.
+A captured run (simulator backend; captured with gpt-5.4 before the copilot moved every call to the BoxAPI gateway): the checkout page returns HTTP 500. The copilot reads the logs and ranks a missing `PAYMENT_API_KEY` first (93%), because the error starts right after the last release. It then shows an approval card with a password field, sets the variable on Liara and probes again: success goes from 67% to 100%.
 
 - **Deploy:** analyses a folder or GitHub repo, proposes the cheapest plan that fits with its monthly price, creates the app, uploads, follows the build and health-checks the URL.
 - **SRE:** reads logs, events and CPU/RAM trends against plan limits, plus live probes. It ranks causes with evidence, applies the smallest safe fix, then verifies before and after.
@@ -133,7 +133,7 @@ flowchart LR
 - **واحد متریک CPU** در API مستند نیست؛ کوپایلت هر دو حالت (هسته یا درصد) را تشخیص می‌دهد و نسبت به سقف پلن نشان می‌دهد.
 - **داخل کانتینر** (فایل‌ها، دیتابیس اپ) خوانده نمی‌شود. API لیارا یک WebSocket برای shell دارد ولی کوپایلت عمداً از آن استفاده نمی‌کند تا دستور دلخواه روی سرور اجرا نشود.
 - **پایش ۲۴ ساعته** نیست؛ ناظر فقط وقتی کوپایلت در حال اجراست کار می‌کند.
-- **مدل زبانی**: `api.openai.com` آی‌پی ایران را مسدود می‌کند، پس روی سرور لیارا BoxAPI (درگاه ایرانی سازگار با OpenAI) استفاده می‌شود. در توسعهٔ محلی OpenAI از پروکسی VPN (`OPENAI_PROXY`) رد می‌شود. ترتیب: ارائه‌دهندهٔ انتخابی، بعد ارائه‌دهندهٔ دیگر، و اگر هیچ‌کدام در دسترس نبود حالت قواعد. وضعیت مدل همیشه بالای صفحه دیده می‌شود. از مدل‌های هوش مصنوعی لیارا استفاده نشده.
+- **مدل زبانی**: همهٔ درخواست‌های مدل به BoxAPI می‌رود (درگاه اسپانسر هکاتون، سازگار با OpenAI) با مدل `openai/gpt-5.4-mini`. کلید BoxAPI بین چند اپ مشترک است و سقفش ۲۰ درخواست در دقیقه و یک درخواست هم‌زمان است؛ برای همین درخواست‌ها در صف‌اند (یکی‌یکی، حداکثر ۱۸ در دقیقه) و اگر ۴۲۹ برگردد همان‌قدر که درگاه می‌گوید صبر می‌کنند. اجرای کامل چهار سناریوی دمو (دیپلوی، خطای ۵۰۰، تزریق دستور، نشت حافظه) با BoxAPI حدود ۰٫۱ دلار خرج داشت. OpenAI فقط وقتی جایگزین است که `LLM_FALLBACK=openai` گذاشته شود. اگر هیچ مدلی در دسترس نبود، حالت قواعد. وضعیت مدل همیشه بالای صفحه دیده می‌شود. از مدل‌های هوش مصنوعی لیارا استفاده نشده.
 
 ## نحوهٔ تعامل کاربر
 
@@ -154,7 +154,7 @@ npm start              # اتصال به API واقعی لیارا روی http:/
 npm run sim            # همان رابط با شبیه‌ساز محلی (بدون نیاز به اعتبار)
 ```
 
-متغیرهای مهم: `LIARA_API_TOKEN`، `LIARA_TEAM_ID` (اگر اعتبار روی تیم است؛ شناسه‌ها از `GET /v2/teams`)، `LIARA_MODE` (`real` یا `sim`)، `LLM_PROVIDER` (`boxapi`، `openai` یا `none`)، `BOXAPI_MODEL`، `OPENAI_MODEL`، `OPENAI_PROXY`، `COPILOT_ALLOWED_APPS`، `COPILOT_PASSCODE`. نمونهٔ کامل در `.env.example` است.
+متغیرهای مهم: `LIARA_API_TOKEN`، `LIARA_TEAM_ID` (اگر اعتبار روی تیم است؛ شناسه‌ها از `GET /v2/teams`)، `LIARA_MODE` (`real` یا `sim`)، `LLM_PROVIDER` (`boxapi`، `openai` یا `none`)، `BOXAPI_MODEL`، `LLM_FALLBACK` (اختیاری، مثلاً `openai`)، `OPENAI_MODEL`، `OPENAI_PROXY`، `COPILOT_ALLOWED_APPS`، `COPILOT_PASSCODE`. نمونهٔ کامل در `.env.example` است.
 
 ### سناریوی دمو
 
