@@ -1,6 +1,6 @@
 // Secret hygiene: env values and tokens never reach the LLM, the audit log or the UI.
 
-const SAFE_ENV_KEYS = new Set(['NODE_ENV', 'PORT', 'TZ', 'LOG_LEVEL', 'APP_ENV', 'DEBUG', 'SHOP_NAME', 'APP_NAME']);
+export const SAFE_ENV_KEYS = new Set(['NODE_ENV', 'PORT', 'TZ', 'LOG_LEVEL', 'APP_ENV', 'DEBUG', 'SHOP_NAME', 'APP_NAME']);
 const SECRET_HINT = /(KEY|SECRET|TOKEN|PASS|PWD|PRIVATE|CREDENTIAL|AUTH|DSN|_URL|URI|COOKIE|SESSION|SALT)/i;
 
 // Used for UI hints (password-style input). Values of every non-safe key are masked anyway.

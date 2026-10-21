@@ -122,7 +122,8 @@ function scanCode(dir, files) {
     for (const m of txt.matchAll(/\benv\(\s*['"]([A-Z_][A-Z0-9_]*)['"]/g)) add(m[1], f);
     for (const m of txt.matchAll(/os\.Getenv\("([A-Z_][A-Z0-9_]*)"\)/g)) add(m[1], f);
     for (const m of txt.matchAll(/(?:\.get\(\s*|(?:pathname|url|path)\s*===\s*|@app\.route\(\s*)['"](\/[a-z0-9\-/]*)['"]/gi)) {
-      if (!/admin|internal|debug|chaos|metrics/i.test(m[1])) routes.add(m[1]);
+      // Only pages that are safe to hit repeatedly: no admin, writes or user-content endpoints.
+      if (!/admin|internal|debug|chaos|metrics|review|comment|webhook|callback|login|logout|signup|register|delete|reset|upload/i.test(m[1])) routes.add(m[1]);
     }
     for (const m of txt.matchAll(/(?:PORT\s*\|\|\s*|listen\(\s*|port\s*[:=]\s*)(\d{4,5})\b/g)) {
       const p = Number(m[1]);

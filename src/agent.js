@@ -10,6 +10,7 @@ import { managedApps, appInfo } from './scope.js';
 import { config } from './config.js';
 import { runFallback } from './fallback.js';
 import { pokeWatcher } from './watcher.js';
+import { killSwitch, appSecrets, forgetSecrets, findInjections, INJECTION_RULE } from './safety.js';
 
 const sessions = new Map();
 const APPROVAL_TIMEOUT_MS = 15 * 60 * 1000;
@@ -33,6 +34,13 @@ export function emit(session, type, data = {}) {
 
 export function broadcast(type, data) {
   for (const s of sessions.values()) emit(s, type, data);
+}
+
+// Kill switch turned on: every open approval card is answered "no".
+export function rejectAllPending(note) {
+  for (const s of sessions.values()) {
+    for (const [id, p] of s.pending) p.resolve({ action: 'reject', note });
+  }
 }
 
 export function resolveApproval(session, id, decision) {
@@ -86,6 +94,14 @@ async function runTool(session, call, ctx) {
   let inputs = {};
   let kind = 'auto';
 
+  if (tool.risk !== 'auto' && killSwitch().on) {
+    // ---- kill switch: the copilot is read-only until a human turns it back on ----
+    const msg = 'کلید توقف اضطراری روشن است؛ کوپایلت فقط می‌خواند و هیچ تغییری روی لیارا نمی‌دهد.';
+    audit({ actor: 'agent', kind: 'refused', tool: tool.name, risk: tool.risk, app, summary: msg, status: 'blocked' });
+    emit(session, 'tool_end', { callId: call.id, tool: tool.name, labelFa: tool.labelFa, ok: false, error: msg });
+    return { error: msg, killSwitch: true };
+  }
+
   if (tool.risk !== 'auto') {
     // ---- approval gate ----
     let card;
@@ -118,9 +134,19 @@ async function runTool(session, call, ctx) {
   const step = (s) => emit(session, 'tool_progress', { callId: call.id, tool: tool.name, ...s });
   try {
     const result = await tool.run(args, { ...ctx, step, inputs });
-    const safe = scrubDeep(result, Object.values(inputs));
+    if (tool.name === 'set_env_vars' && app) forgetSecrets(app);
+    // Mask every env value of the app wherever it shows up (logs often print config).
+    const secrets = [...Object.values(inputs), ...(await appSecrets(ctx.liara, app))];
+    const safe = scrubDeep(result, secrets);
+    // Untrusted text (logs, files) that tries to instruct an AI: flag it, never act on it.
+    const injections = findInjections(tool.name, safe);
+    if (injections.length) {
+      safe.securityNotice = { promptInjectionAttempts: injections, rule: INJECTION_RULE };
+      emit(session, 'security', { tool: tool.name, app, samples: injections });
+      audit({ actor: 'agent', kind: 'security_alert', tool: tool.name, risk: 'auto', app, summary: `تلاش برای تزریق دستور در ${tool.labelFa} شناسایی و نادیده گرفته شد (${injections.length} مورد)`, status: 'blocked' });
+    }
     emit(session, 'tool_end', { callId: call.id, tool: tool.name, labelFa: tool.labelFa, ok: result?.ok !== false && !result?.error, ui: tool.ui, data: tool.ui ? safe : undefined, ms: Date.now() - started });
-    audit({ actor: kind === 'auto' ? 'agent' : 'agent', kind, tool: tool.name, risk: tool.risk, app, status: result?.ok === false || result?.error ? 'error' : 'ok', durationMs: Date.now() - started, summary: tool.labelFa, args }, Object.values(inputs));
+    audit({ actor: 'agent', kind, tool: tool.name, risk: tool.risk, app, status: result?.ok === false || result?.error ? 'error' : 'ok', durationMs: Date.now() - started, summary: tool.labelFa, args }, secrets);
     if (kind !== 'auto') {
       emit(session, 'refresh', {});
       pokeWatcher();
@@ -169,7 +195,11 @@ async function fallbackTurn(session, userText, ctx) {
     emit(session, 'assistant_end', { msgId });
     session.messages.push({ role: 'assistant', content: text });
   };
-  const runToolByName = (name, args) => runTool(session, { id: `fb_${randomUUID().slice(0, 8)}`, function: { name, arguments: JSON.stringify(args) } }, ctx);
+  const runToolByName = async (name, args) => {
+    const r = await runTool(session, { id: `fb_${randomUUID().slice(0, 8)}`, function: { name, arguments: JSON.stringify(args) } }, ctx);
+    if (r?.securityNotice) await say(`⚠️ در متنی که خواندم (${r.securityNotice.promptInjectionAttempts.length} خط) کسی سعی کرده به هوش مصنوعی دستور بدهد. این متن داده حساب شد و هیچ کاری بر اساس آن انجام نشد.`);
+    return r;
+  };
   await runFallback(session, userText, { runToolByName, say });
 }
 

@@ -69,6 +69,8 @@ async function open(p, { messages, tools, maxTokens }) {
   else body.max_tokens = maxTokens;
   // OpenAI only allows function tools on chat/completions for GPT-5 when reasoning is off.
   if (p.name === 'openai' && /gpt-5/.test(p.model)) body.reasoning_effort = 'none';
+  // Through BoxAPI the same models accept tools with low effort; keeps the shared credit lean.
+  else if (/gpt-5/.test(p.model)) body.reasoning_effort = process.env.LLM_REASONING_EFFORT || 'low';
   if (process.env.LLM_TEMPERATURE) body.temperature = Number(process.env.LLM_TEMPERATURE);
   if (tools?.length) {
     body.tools = tools;

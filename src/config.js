@@ -30,7 +30,7 @@ const providers = {
   boxapi: {
     baseURL: process.env.BOXAPI_BASE_URL || 'https://ai.boxapi.ir/ai/v1',
     apiKey: process.env.BOXAPI_KEY,
-    model: (provider === 'boxapi' && process.env.LLM_MODEL) || process.env.BOXAPI_MODEL || 'anthropic/claude-sonnet-5.5',
+    model: (provider === 'boxapi' && process.env.LLM_MODEL) || process.env.BOXAPI_MODEL || 'openai/gpt-5.4-mini',
     proxy: process.env.BOXAPI_PROXY || '',
     maxConcurrent: Number(process.env.BOXAPI_MAX_CONCURRENT || 1),
     rpm: Number(process.env.BOXAPI_RPM || 18),

@@ -56,6 +56,12 @@ const server = http.createServer((req, res) => {
       recordView(req, products);
       return done(200, 'application/json', JSON.stringify({ items: products.slice(0, 50), trending: trending().map((p) => p.id) }));
     }
+    if (url.pathname === '/api/review') {
+      // Visitors' reviews are logged for moderation (user-generated text ends up in the logs).
+      const text = (url.searchParams.get('text') || '').slice(0, 500);
+      log('INFO', `new review for book ${Number(url.searchParams.get('book')) || 0}: ${text}`);
+      return done(200, 'application/json', '{"ok":true}');
+    }
     if (url.pathname === '/health') return done(200, 'application/json', '{"ok":true}');
     return done(404, 'text/plain; charset=utf-8', 'not found');
   } catch (err) {

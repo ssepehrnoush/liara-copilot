@@ -50,6 +50,10 @@ button { font-family: inherit; font-size: inherit; cursor: pointer; }
 .primary:disabled { opacity: .45; cursor: not-allowed; }
 .ghost { background: transparent; color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 7px 14px; }
 .small { padding: 3px 12px; font-size: 13px; }
+.killbtn { color: var(--bad); border-color: var(--bad); }
+.killbtn.on { background: var(--bad); color: #fff; }
+.card.security { border: 2px solid var(--bad); background: var(--bad-soft); }
+.card.security pre { font-family: var(--mono); font-size: 12px; white-space: pre-wrap; unicode-bidi: plaintext; text-align: start; background: var(--panel); border-radius: 8px; padding: 6px 8px; margin: 6px 0; }
 .danger { background: var(--bad); color: #fff; border: 0; border-radius: 10px; padding: 8px 18px; }
 
 .layout { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(320px, 1fr); gap: 16px; padding: 16px 20px; height: calc(100vh - 62px); }

@@ -483,7 +483,7 @@ export const tools = [
       }
       session.currentApp = a.app;
       session.lastDeployAt = Date.now();
-      return { ok: rel.state === 'READY', releaseState: rel.state, failReason: rel.failReason, buildTail: rel.buildTail.slice(-10), probe };
+      return { ok: rel.state === 'READY', url: liara.appUrl(a.app), releaseState: rel.state, failReason: rel.failReason, buildTail: rel.buildTail.slice(-10), probe };
     },
   },
   {

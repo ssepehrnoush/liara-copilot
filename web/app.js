@@ -150,6 +150,15 @@
       case 'audit':
         prependAudit(ev.entry);
         break;
+      case 'kill_switch':
+        setKill(ev.killSwitch);
+        break;
+      case 'security':
+        add(h('div', { class: 'card security' },
+          h('h4', {}, '🛡️ تلاش برای تزریق دستور شناسایی شد'),
+          h('div', {}, `در ${ev.app ? `لاگ‌ها یا فایل‌های ${ev.app}` : 'متن خوانده‌شده'} متنی هست که سعی می‌کند به هوش مصنوعی دستور بدهد. کوپایلت این متن را فقط داده حساب کرد؛ هیچ ابزاری به خاطر آن اجرا نمی‌شود و هر تغییری همچنان کارت تأیید شما را لازم دارد.`),
+          h('pre', {}, ev.samples.join('\n'))));
+        break;
       case 'reset':
         messages.innerHTML = '';
         messages.append(welcomeClone);
@@ -466,7 +475,22 @@
   }
 
   // ------------------------------------------------------------ audit log
-  const KIND_FA = { auto: ['خودکار', 'auto'], approved: ['تأییدشده', 'approved'], rejected: ['رد شد', 'rejected'], approval_requested: ['درخواست تأیید', 'medium'], alert: ['هشدار', 'alert'], refused: ['خارج از محدوده', 'error'] };
+  let killOn = false;
+  function setKill(ks) {
+    killOn = Boolean(ks?.on);
+    const b = $('#killBtn');
+    b.classList.toggle('on', killOn);
+    b.textContent = killOn ? '▶️ فعال کردن دوباره' : '🛑 توقف اقدامات';
+    $('#killBox').classList.toggle('hidden', !killOn);
+  }
+  $('#killBtn').addEventListener('click', async () => {
+    const turnOn = !killOn;
+    if (turnOn && !confirm('توقف اضطراری: از این لحظه کوپایلت فقط می‌خواند و کارت‌های تأیید باز رد می‌شوند. ادامه؟')) return;
+    const r = await api('/api/killswitch', { method: 'POST', body: { on: turnOn } }).catch(() => null);
+    if (r?.killSwitch) setKill(r.killSwitch);
+  });
+
+  const KIND_FA = { security_alert: ['امنیتی', 'error'], kill_switch_on: ['توقف اضطراری', 'error'], kill_switch_off: ['فعال‌سازی دوباره', 'ok'], auto: ['خودکار', 'auto'], approved: ['تأییدشده', 'approved'], rejected: ['رد شد', 'rejected'], approval_requested: ['درخواست تأیید', 'medium'], alert: ['هشدار', 'alert'], refused: ['خارج از محدوده', 'error'] };
   const ACTOR = { agent: '🤖', user: '👤', watcher: '👁️' };
   function auditRow(e) {
     const [k, cls] = KIND_FA[e.kind] || [e.kind, ''];
@@ -540,6 +564,7 @@
     mc.className = `chip ${cfg.liaraMode === 'sim' ? 'sim' : 'real'}`;
     $('#modelChip').textContent = `مدل: ${cfg.llmModel.split('/').pop()} از ${cfg.llmProvider === 'boxapi' ? 'BoxAPI' : 'OpenAI'}`;
     if (cfg.llmAvailable === false) handle({ type: 'llm_status', available: false, reason: cfg.llmReason });
+    setKill(cfg.killSwitch);
     try { await api('/api/status'); } catch { return; }
     connect();
     refreshStatus(true);

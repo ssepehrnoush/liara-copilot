@@ -5,7 +5,9 @@ import crypto from 'node:crypto';
 import { config, publicConfig } from './config.js';
 import { LiaraApi } from './liara/client.js';
 import { LiaraSim } from './liara/sim.js';
-import { getSession, runTurn, resolveApproval, emit, broadcast, llmState, probeLlm } from './agent.js';
+import { getSession, runTurn, resolveApproval, emit, broadcast, llmState, probeLlm, rejectAllPending } from './agent.js';
+import { killSwitch, setKillSwitch } from './safety.js';
+import { audit } from './audit.js';
 import { recentAudit, auditBus } from './audit.js';
 import { managedApps, canModify, appInfo } from './scope.js';
 import { startWatcher, healthSnapshot } from './watcher.js';
@@ -33,10 +35,22 @@ app.use('/api', (req, res, next) => {
   return ok ? next() : res.status(401).json({ error: 'auth' });
 });
 
-app.get('/api/config', (_req, res) => res.json({ ...publicConfig(), llmAvailable: !(llmState.downUntil > Date.now()), llmReason: llmState.reason }));
+app.get('/api/config', (_req, res) => res.json({ ...publicConfig(), llmAvailable: !(llmState.downUntil > Date.now()), llmReason: llmState.reason, killSwitch: killSwitch() }));
+
+// Emergency stop: from now on only read-only tools run; open approval cards are rejected.
+app.post('/api/killswitch', (req, res) => {
+  const on = Boolean(req.body?.on);
+  if (!on && killSwitch().forced) return res.status(409).json({ error: 'COPILOT_READONLY=1 is set on the server', killSwitch: killSwitch() });
+  const ks = setKillSwitch(on);
+  if (on) rejectAllPending('kill switch');
+  audit({ actor: 'user', kind: on ? 'kill_switch_on' : 'kill_switch_off', tool: 'kill_switch', risk: 'auto', summary: on ? 'توقف اضطراری روشن شد: فقط خواندن' : 'توقف اضطراری خاموش شد', status: on ? 'blocked' : 'ok' });
+  broadcast('kill_switch', { killSwitch: ks });
+  res.json({ killSwitch: ks });
+});
 
 probeLlm();
-setInterval(() => { if (llmState.downUntil > Date.now() || Date.now() - llmState.checkedAt > 10 * 60 * 1000) probeLlm(); }, 5 * 60 * 1000).unref();
+// Re-probe only while the model is marked down, so a healthy setup spends no extra calls.
+setInterval(() => { if (llmState.downUntil > Date.now()) probeLlm(); }, 5 * 60 * 1000).unref();
 
 // ---- chat session (server-sent events) ----
 app.get('/api/session/:id/events', (req, res) => {

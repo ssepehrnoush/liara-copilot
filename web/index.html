@@ -24,6 +24,7 @@
       <span id="modeChip" class="chip">...</span>
       <span id="modelChip" class="chip muted"></span>
       <span id="balanceChip" class="chip"></span>
+      <button id="killBtn" class="ghost small killbtn" title="توقف اضطراری: از این لحظه هیچ تغییری روی لیارا انجام نمی‌شود">🛑 توقف اقدامات</button>
       <button id="resetBtn" class="ghost small" title="شروع گفتگوی تازه">گفتگوی تازه</button>
     </div>
   </header>
@@ -57,6 +58,7 @@
     </section>
 
     <aside class="side" aria-label="وضعیت سرویس‌ها">
+      <div id="killBox" class="alert down hidden"><span class="msg-a">🛑 توقف اضطراری روشن است: کوپایلت فقط می‌خواند و هیچ تغییری روی لیارا نمی‌دهد.</span></div>
       <div id="alertBox" class="alert hidden"></div>
       <div class="tabs" role="tablist">
         <button class="tab active" data-tab="status" role="tab">وضعیت زنده</button>
