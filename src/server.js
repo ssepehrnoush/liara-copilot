@@ -162,6 +162,7 @@ auditBus.on('entry', (rec) => broadcast('audit', { entry: rec }));
 
 // ---- static UI ----
 app.use(express.static(path.join(config.root, 'web'), { extensions: ['html'] }));
+app.use('/assets', express.static(path.join(config.root, 'assets')));
 
 startWatcher(liara, (alert) => broadcast('alert', { alert }));
 

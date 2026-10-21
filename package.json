@@ -1,14 +1,15 @@
 {
   "name": "liara-copilot",
   "version": "0.1.0",
-  "description": "Persian deploy + SRE agent for Liara: from 'here is my project' to a live app, then diagnose and fix incidents with human approval.",
+  "description": "Persian deploy and SRE agent for the Liara cloud: from \"here is my project\" to a live app, then diagnose HTTP 500s, slowdowns and memory leaks from real logs and metrics, fix with human approval, and verify.",
   "type": "module",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
     "sim": "node src/server.js --sim",
-    "check": "node scripts/check.js"
+    "check": "node scripts/check.js",
+    "test": "node --test \"test/**/*.test.js\""
   },
   "engines": {
     "node": ">=20"
@@ -19,5 +20,28 @@
     "ignore": "^6.0.2",
     "tar": "^7.4.3",
     "undici": "^7.16.0"
-  }
+  },
+  "keywords": [
+    "liara",
+    "liara-cloud",
+    "paas",
+    "deploy",
+    "devops",
+    "sre",
+    "ai-agent",
+    "llm-agent",
+    "human-in-the-loop",
+    "incident-response",
+    "observability",
+    "persian",
+    "iran",
+    "tool-calling",
+    "prompt-injection"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ssepehrnoush/liara-copilot.git"
+  },
+  "homepage": "https://github.com/ssepehrnoush/liara-copilot#readme",
+  "private": true
 }

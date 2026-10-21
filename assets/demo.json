@@ -1,0 +1,228 @@
+{
+ "title": "liara-copilot: HTTP 500 -> diagnosis -> approved fix -> verified",
+ "font_size": 14,
+ "hold": 4.0,
+ "rows": [
+  {
+   "t": "cmd",
+   "s": "node scripts/e2e.js \"My checkout page (/checkout) returns HTTP 500. What happened?\""
+  },
+  {
+   "t": "gap"
+  },
+  {
+   "t": "out",
+   "spans": [
+    [
+     "[2.9s] ",
+     "dim"
+    ],
+    [
+     "▶ ",
+     "cyan"
+    ],
+    [
+     "investigate_incident",
+     "bold"
+    ],
+    [
+     "  auto",
+     "dim"
+    ]
+   ]
+  },
+  {
+   "t": "out",
+   "spans": [
+    [
+     "[3.0s] ",
+     "dim"
+    ],
+    [
+     "✓ ",
+     "green"
+    ],
+    [
+     "investigate_incident",
+     "text"
+    ]
+   ]
+  },
+  {
+   "t": "out",
+   "spans": [
+    [
+     "     #1 ",
+     "dim"
+    ],
+    [
+     "missing_env",
+     "yellow"
+    ],
+    [
+     "  93%",
+     "bold"
+    ]
+   ]
+  },
+  {
+   "t": "out",
+   "s": "     Error: PAYMENT_API_KEY is not set: cannot create payment session",
+   "c": "red"
+  },
+  {
+   "t": "rtl",
+   "s": "PAYMENT_API_KEY در متغیرهای اپ روی لیارا وجود ندارد."
+  },
+  {
+   "t": "rtl",
+   "s": "خطاها بعد از آخرین ریلیز شروع شده‌اند (کد جدید این متغیر را لازم دارد)."
+  },
+  {
+   "t": "out",
+   "spans": [
+    [
+     "[5.6s] ",
+     "dim"
+    ],
+    [
+     "◆ approval card ",
+     "magenta"
+    ],
+    [
+     "set_env_vars",
+     "bold"
+    ],
+    [
+     "  risk=medium",
+     "yellow"
+    ]
+   ]
+  },
+  {
+   "t": "rtl",
+   "s": "۱ متغیر روی ketabkadeh ثبت می‌شود؛ بقیهٔ متغیرها دست نمی‌خورند."
+  },
+  {
+   "t": "out",
+   "s": "   → approved by the user",
+   "c": "green"
+  },
+  {
+   "t": "out",
+   "spans": [
+    [
+     "[5.6s] ",
+     "dim"
+    ],
+    [
+     "▶ ",
+     "cyan"
+    ],
+    [
+     "set_env_vars",
+     "bold"
+    ],
+    [
+     "  medium",
+     "dim"
+    ]
+   ]
+  },
+  {
+   "t": "out",
+   "s": "   · container restarted",
+   "c": "dim"
+  },
+  {
+   "t": "out",
+   "spans": [
+    [
+     "[9.6s] ",
+     "dim"
+    ],
+    [
+     "✓ ",
+     "green"
+    ],
+    [
+     "set_env_vars",
+     "text"
+    ]
+   ]
+  },
+  {
+   "t": "out",
+   "spans": [
+    [
+     "[12.3s] ",
+     "dim"
+    ],
+    [
+     "▶ ",
+     "cyan"
+    ],
+    [
+     "verify_recovery",
+     "bold"
+    ],
+    [
+     "  auto",
+     "dim"
+    ]
+   ]
+  },
+  {
+   "t": "out",
+   "spans": [
+    [
+     "[12.4s] ",
+     "dim"
+    ],
+    [
+     "✓ ",
+     "green"
+    ],
+    [
+     "verify_recovery",
+     "text"
+    ],
+    [
+     "  recovered: success 67% -> 100%",
+     "green"
+    ]
+   ]
+  },
+  {
+   "t": "gap"
+  },
+  {
+   "t": "rtl",
+   "s": "علت پیدا شد: خود صفحهٔ پرداخت خراب نبود، ریشهٔ مشکل نبودن متغیر محرمانهٔ"
+  },
+  {
+   "t": "rtl",
+   "s": "PAYMENT_API_KEY در نسخهٔ جدید بود."
+  },
+  {
+   "t": "rtl",
+   "s": "قوی‌ترین نشانه این بود که لاگ دقیقاً می‌گفت PAYMENT_API_KEY is not set و"
+  },
+  {
+   "t": "rtl",
+   "s": "این خطا از همان بعد از انتشار v۲ شروع شده بود."
+  },
+  {
+   "t": "rtl",
+   "s": "متغیر را تنظیم کردم و برنامه یک بار از نو بالا آمد."
+  },
+  {
+   "t": "rtl",
+   "s": "الان مشکل برطرف شده: قبل از اصلاح، /checkout خطای ۵۰۰ می‌داد؛ بعد از"
+  },
+  {
+   "t": "rtl",
+   "s": "اصلاح، همهٔ بررسی‌ها روی /checkout با کد ۲۰۰ جواب دادند."
+  }
+ ]
+}

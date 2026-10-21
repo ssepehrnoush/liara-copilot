@@ -1,4 +1,34 @@
-# لیارا کوپایلت (Liara Copilot)
+# Liara Copilot (لیارا کوپایلت)
+
+**A Persian AI agent that takes a developer from "here is my project" to a live app on [Liara](https://liara.ir), then finds and fixes what breaks it, and changes nothing without the user's approval.**
+
+![license](https://img.shields.io/badge/license-MIT-blue) ![node](https://img.shields.io/badge/node-%3E%3D20-339933) ![liara](https://img.shields.io/badge/Liara-management%20API-00a3ff) ![human in the loop](https://img.shields.io/badge/changes-human%20approved-orange) ![tests](https://img.shields.io/badge/tests-node%20--test-lightgrey)
+
+<p align="center"><img src="assets/demo.svg" alt="Animated terminal demo: HTTP 500 on checkout, diagnosis from logs, approval card, fix on Liara, verified" width="780"></p>
+
+A captured run (simulator backend, model gpt-5.4): the checkout page returns HTTP 500. The copilot reads the logs and ranks a missing `PAYMENT_API_KEY` first (93%), because the error starts right after the last release. It then shows an approval card with a password field, sets the variable on Liara and probes again: success goes from 67% to 100%.
+
+- **Deploy:** analyses a folder or GitHub repo, proposes the cheapest plan that fits with its monthly price, creates the app, uploads, follows the build and health-checks the URL.
+- **SRE:** reads logs, events and CPU/RAM trends against plan limits, plus live probes. It ranks causes with evidence, applies the smallest safe fix, then verifies before and after.
+- **Safety:** read-only tools run on their own; every change goes through an approval card enforced in code. There are no delete tools, prompt injection in logs is detected, and a kill switch is one click away. See [SECURITY.md](SECURITY.md).
+
+| Incident: memory leak found in code, handed to the coding agent, verified | Prompt injection hidden in a visitor review, flagged and ignored |
+|---|---|
+| ![leak](assets/ui-leak.jpg) | ![injection](assets/ui-injection.jpg) |
+
+## Install
+
+```bash
+npm install && cp .env.example .env && npm start
+```
+
+Fill `LIARA_API_TOKEN` (and `LIARA_TEAM_ID` if your credit is on a team) plus one LLM key, then open http://localhost:4100. `npm run sim` runs the same UI against a local simulator of the Liara API; no credit is needed for that. `npm test` runs the unit tests.
+
+Full documentation is in Persian below.
+
+---
+
+## لیارا کوپایلت
 
 دستیار فارسی برای **دیپلوی** و **پایداری سایت** روی لیارا. برنامه‌نویسی که از دیپلوی چیزی نمی‌داند فقط می‌گوید «این پروژهٔ من است»؛ کوپایلت پروژه را تحلیل می‌کند، سرویس و پلن مناسب را پیشنهاد می‌دهد، بعد از تأیید کاربر سرویس را می‌سازد و منتشر می‌کند. وقتی سایت کند شد یا خطای ۵۰۰ داد، مثل یک SRE لاگ و رویداد و مصرف CPU و رم را از API لیارا می‌خواند، علت‌های احتمالی را با شاهد و درصد اطمینان رتبه‌بندی می‌کند، راه‌حل پیشنهاد می‌دهد، فقط با اجازهٔ کاربر اجرا می‌کند و در آخر نتیجه را با عدد قبل و بعد بررسی می‌کند.
 
@@ -163,9 +193,12 @@ src/
   liara/client.js    کلاینت API لیارا
   liara/sim.js       شبیه‌ساز با همان رابط
 web/                 رابط فارسی بدون مرحلهٔ build
-demo/                اپ دمو و بازدیدکنندهٔ ساختگی
+demo/                اپ دمو (سه نسخه)، بازدیدکنندهٔ ساختگی و نظر مخرب برای دمو
+scripts/e2e.js       اجرای یک گفتگوی کامل از خط فرمان (برای تمرین دمو)
+test/                تست‌های واحد: تحلیل پروژه، انتخاب پلن، ماسک رازها، تشخیص تزریق، رتبه‌بندی علت‌ها
+assets/              دموی متحرک و تصویرهای رابط
 ```
 
-## مجوز
+## مجوز (License)
 
-MIT
+MIT. فایل [LICENSE](LICENSE) را ببینید.
