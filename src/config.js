@@ -1,0 +1,82 @@
+// Loads settings from .env (this folder first, then the parent folder) without
+// printing any value. Every secret stays server-side.
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+
+function loadEnvFile(file) {
+  if (!fs.existsSync(file)) return;
+  for (const raw of fs.readFileSync(file, 'utf8').split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line || line.startsWith('#') || !line.includes('=')) continue;
+    const key = line.slice(0, line.indexOf('=')).trim();
+    let value = line.slice(line.indexOf('=') + 1).trim();
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1);
+    }
+    if (process.env[key] === undefined && value !== '') process.env[key] = value;
+  }
+}
+
+loadEnvFile(path.join(ROOT, '.env'));
+loadEnvFile(path.join(ROOT, '..', '.env'));
+
+const argvSim = process.argv.includes('--sim');
+
+const provider = (process.env.LLM_PROVIDER || (process.env.BOXAPI_KEY ? 'boxapi' : 'openai')).toLowerCase();
+const providers = {
+  boxapi: {
+    baseURL: process.env.BOXAPI_BASE_URL || 'https://ai.boxapi.ir/ai/v1',
+    apiKey: process.env.BOXAPI_KEY,
+    model: (provider === 'boxapi' && process.env.LLM_MODEL) || process.env.BOXAPI_MODEL || 'anthropic/claude-sonnet-5.5',
+    fastModel: process.env.LLM_FAST_MODEL || 'openai/gpt-4.1-mini',
+  },
+  openai: {
+    baseURL: process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
+    apiKey: process.env.OPENAI_API_KEY,
+    model: (provider === 'openai' && process.env.LLM_MODEL) || process.env.OPENAI_MODEL || 'gpt-4.1',
+    fastModel: process.env.LLM_FAST_MODEL || 'gpt-4.1-mini',
+  },
+};
+
+export const config = {
+  root: ROOT,
+  dataDir: path.join(ROOT, 'data'),
+  port: Number(process.env.PORT || process.env.COPILOT_PORT || 4100),
+  // "real" talks to api.liara.ir; "sim" runs apps locally behind the same interface.
+  liaraMode: argvSim ? 'sim' : (process.env.LIARA_MODE || 'real').toLowerCase(),
+  liara: {
+    baseURL: process.env.LIARA_API_URL || 'https://api.liara.ir',
+    token: process.env.LIARA_API_TOKEN,
+    teamID: process.env.LIARA_TEAM_ID || '',
+    appDomainSuffix: process.env.LIARA_APP_DOMAIN || 'liara.run',
+  },
+  llm: {
+    provider,
+    ...(providers[provider] || { model: 'none' }),
+    // Fallback order: chosen provider first, then any other provider that has a key.
+    chain: provider === 'none' ? [] : [provider, ...Object.keys(providers).filter((k) => k !== provider)]
+      .filter((k) => providers[k]?.apiKey)
+      .map((k) => ({ name: k, ...providers[k], model: k === provider ? providers[k].model : (process.env[`${k.toUpperCase()}_MODEL`] || providers[k].model) })),
+    active: null,
+  },
+  // Optional passcode for when the copilot itself is hosted publicly.
+  passcode: process.env.COPILOT_PASSCODE || '',
+  // Apps the copilot is allowed to change. Empty = only apps it created itself.
+  allowedApps: (process.env.COPILOT_ALLOWED_APPS || '').split(',').map((s) => s.trim()).filter(Boolean),
+  watchIntervalSec: Number(process.env.WATCH_INTERVAL_SEC || 20),
+};
+
+export function publicConfig() {
+  return {
+    liaraMode: config.liaraMode,
+    llmProvider: config.llm.provider,
+    llmModel: config.llm.model,
+    hasLiaraToken: Boolean(config.liara.token),
+    hasLlmKey: config.llm.chain.length > 0,
+    llmChain: config.llm.chain.map((p) => `${p.name}:${p.model}`),
+    passcodeRequired: Boolean(config.passcode),
+  };
+}

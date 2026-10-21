@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>لیارا کوپایلت</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo" aria-hidden="true">
+        <svg viewBox="0 0 32 32" width="28" height="28"><circle cx="16" cy="16" r="14" fill="var(--accent)"/><path d="M10 17l4 4 8-9" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div>
+        <div class="title">لیارا کوپایلت</div>
+        <div class="subtitle">از «این پروژهٔ من است» تا سایت زنده، و بعد مراقبت از آن</div>
+      </div>
+    </div>
+    <div class="chips">
+      <span id="modeChip" class="chip">...</span>
+      <span id="modelChip" class="chip muted"></span>
+      <span id="balanceChip" class="chip"></span>
+      <button id="resetBtn" class="ghost small" title="شروع گفتگوی تازه">گفتگوی تازه</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="chat" aria-label="گفتگو">
+      <div id="messages" class="messages">
+        <div class="welcome" id="welcome">
+          <h2>سلام! من کوپایلت لیارا هستم.</h2>
+          <p>پروژه‌تان را بدهید تا روی لیارا منتشرش کنم، یا اگر سایت کند شده یا خطا می‌دهد بگویید تا علتش را از روی لاگ و مصرف منابع پیدا کنم.</p>
+          <ul class="rules">
+            <li><b>خودکار:</b> خواندن وضعیت، لاگ، مصرف CPU و رم، تست زندهٔ سایت و تحلیل کد.</li>
+            <li><b>فقط با تأیید شما:</b> ساخت سرویس، انتشار نسخه، تغییر متغیرها، ری‌استارت، تغییر پلن و خاموش کردن.</li>
+            <li><b>هرگز:</b> حذف سرویس، دیتابیس یا دیسک. این کار فقط از کنسول لیارا و به دست خودتان انجام می‌شود.</li>
+          </ul>
+        </div>
+      </div>
+      <div class="composer">
+        <div class="suggestions" id="suggestions">
+          <button data-text="پروژه‌ام توی پوشهٔ demo/shop-v1 هست. می‌خوام روی لیارا بالا بیاد.">🚀 پروژه‌ام را منتشر کن</button>
+          <button data-text="نسخهٔ جدید پروژه توی پوشهٔ demo/shop-v2 آماده‌ست. منتشرش کن.">📦 انتشار نسخهٔ جدید</button>
+          <button data-text="صفحهٔ پرداخت سایتم (/checkout) خطای ۵۰۰ می‌ده. چی شده؟">🔥 خطای ۵۰۰ دارم</button>
+          <button data-text="سایتم خیلی کند شده. بررسی کن ببین مشکل از کجاست.">🐢 سایتم کند شده</button>
+          <button data-text="وضعیت سرویس‌هام چطوره؟">📊 وضعیت سرویس‌ها</button>
+        </div>
+        <form id="form" class="inputrow">
+          <textarea id="input" rows="1" placeholder="درخواستتان را ساده بنویسید؛ مثلاً «سایتم بالا نمیاد»" aria-label="پیام"></textarea>
+          <button id="send" type="submit" class="primary">ارسال</button>
+        </form>
+      </div>
+    </section>
+
+    <aside class="side" aria-label="وضعیت سرویس‌ها">
+      <div id="alertBox" class="alert hidden"></div>
+      <div class="tabs" role="tablist">
+        <button class="tab active" data-tab="status" role="tab">وضعیت زنده</button>
+        <button class="tab" data-tab="audit" role="tab">گزارش اقدامات</button>
+      </div>
+      <div id="tab-status" class="tabpane">
+        <div id="apps" class="apps"><div class="empty">در حال خواندن از لیارا…</div></div>
+      </div>
+      <div id="tab-audit" class="tabpane hidden">
+        <div class="legend">
+          <span class="badge auto">خودکار</span> فقط خواندن، بدون تغییر
+          <span class="badge approved">با تأیید شما</span> تغییر روی سرویس
+        </div>
+        <div id="audit" class="audit"></div>
+      </div>
+    </aside>
+  </main>
+
+  <div id="login" class="login hidden">
+    <form id="loginForm" class="loginbox">
+      <h3>ورود به کوپایلت</h3>
+      <input id="passcode" type="password" placeholder="رمز دسترسی" autocomplete="current-password">
+      <button class="primary" type="submit">ورود</button>
+    </form>
+  </div>
+
+  <script src="vendor/marked.min.js"></script>
+  <script src="vendor/purify.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

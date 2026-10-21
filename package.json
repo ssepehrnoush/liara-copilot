@@ -1,0 +1,22 @@
+{
+  "name": "liara-copilot",
+  "version": "0.1.0",
+  "description": "Persian deploy + SRE agent for Liara: from 'here is my project' to a live app, then diagnose and fix incidents with human approval.",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "sim": "node src/server.js --sim",
+    "check": "node scripts/check.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.21.2",
+    "ignore": "^6.0.2",
+    "tar": "^7.4.3"
+  }
+}

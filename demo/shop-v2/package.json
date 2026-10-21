@@ -1,0 +1,13 @@
+{
+  "name": "ketabkadeh",
+  "version": "2.0.0",
+  "description": "Ketabkadeh: a tiny Persian bookshop used as the Liara Copilot demo app",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
