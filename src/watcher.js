@@ -27,6 +27,9 @@ function judge(h) {
   const with5xx = recent.filter((p) => p.paths.some((x) => x.errors5xx > 0)).length;
   const lat = recent.map((p) => p.p50ms || 0).sort((a, b) => a - b)[Math.floor(recent.length / 2)];
   const timeouts = last.paths.reduce((a, x) => a + x.failures, 0);
+  // No answer at all (timeouts, connection errors) is the worst case, not a healthy one.
+  const dead = recent.filter((p) => p.ok === 0).length;
+  if (dead >= 2) return { level: 'down', fa: 'سایت جواب نمی‌دهد: درخواست‌ها به تایم‌اوت یا خطای سرور خوردند' };
   if (with5xx >= 2) {
     const sample = last.paths.find((x) => x.errors5xx > 0) || last.paths[0];
     return { level: 'down', fa: `صفحهٔ ${sample?.path || '/'} خطا می‌دهد (${Object.keys(sample?.codes || {}).join('، ')})` };

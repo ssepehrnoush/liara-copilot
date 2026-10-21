@@ -152,9 +152,11 @@ async function typeInto(p, loc, text) {
   await click(p, loc);
   await loc.pressSequentially(text, { delay: 28 });
 }
+const children = [];
 async function term(p, cmd, argv, { untilLine, keep = false } = {}) {
   await p.evaluate((c) => window.__term.show(c), cmd);
   const child = spawn(process.execPath, argv, { cwd: process.cwd() });
+  children.push(child);
   const onData = (buf) => {
     for (const line of buf.toString().split(/\r?\n/).filter(Boolean)) {
       p.evaluate((l) => window.__term.add(l), line).catch(() => {});
@@ -356,13 +358,14 @@ try {
 
   if (ONLY.includes(6)) {
     await say('سناریوی آخر: بازدیدکننده‌های زیاد. ترافیک ساختگی می‌فرستم و زمان پاسخ را در ترمینال می‌بینیم.');
-    const load = await term(page, `node demo/loadgen.js ${SHOP} 4 12`, ['demo/loadgen.js', SHOP, '4', '12'], { keep: true });
+    const load = await term(page, `node demo/loadgen.js ${SHOP} 3 15`, ['demo/loadgen.js', SHOP, '3', '15'], { keep: true });
     await hold(6);
     await fast(20, async () => {
       await say('سمت چپ، نمودار رم مدام رو به بالاست و زمان پاسخ کم‌کم بیشتر می‌شود.');
       await page.locator('#alertBox.degraded, #alertBox.down').waitFor({ timeout: 900000 });
     });
-    await say('ناظر سلامت هشدار داد که سایت کند شده. بررسی را شروع می‌کنم.');
+    const down = await page.locator('#alertBox.down').count();
+    await say(down ? 'ناظر سلامت هشدار داد که سایت دیگر جواب نمی‌دهد. بررسی را شروع می‌کنم.' : 'ناظر سلامت هشدار داد که سایت کند شده. بررسی را شروع می‌کنم.');
     await moveTo(page, page.locator('#alertBox'));
     await hold(3);
     const diag6 = await count('.card:has-text("عیب‌یابی")');
@@ -398,6 +401,7 @@ try {
   }
 } catch (e) {
   log('ERROR', e.message);
+  for (const c of children) c.kill();
   fs.writeFileSync(path.join(OUT, 'error.txt'), String(e.stack));
 } finally {
   const end = rec.tick();
