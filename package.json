@@ -43,5 +43,9 @@
     "url": "https://github.com/ssepehrnoush/liara-copilot.git"
   },
   "homepage": "https://github.com/ssepehrnoush/liara-copilot#readme",
-  "private": true
+  "private": true,
+  "devDependencies": {
+    "playwright-core": "^1.48.2",
+    "vazirmatn": "^33.0.3"
+  }
 }
