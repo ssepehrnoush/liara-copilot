@@ -35,7 +35,9 @@ export async function httpCheck(baseUrl, { paths = ['/'], samples = 4, timeoutMs
     perPath.push({
       path: p,
       samples: results.length,
-      ok: results.filter((r) => r.status >= 200 && r.status < 400).length,
+      // A 4xx means the page answered (wrong address, auth); only 5xx and timeouts count as failures.
+      ok: results.filter((r) => r.status >= 200 && r.status < 500).length,
+      clientErrors: results.filter((r) => r.status >= 400 && r.status < 500).length,
       errors5xx: results.filter((r) => r.status >= 500).length,
       failures: results.filter((r) => r.status === 0).length,
       codes,

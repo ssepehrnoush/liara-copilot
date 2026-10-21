@@ -61,7 +61,7 @@ export async function deployRelease(liara, { app, dir, port, platform, message, 
     const state = release.state || lastState;
     if (state && state !== lastState) {
       lastState = state;
-      const fa = { QUEUED: 'در صف بیلد', BUILDING: 'در حال بیلد', PUSHING: 'ذخیرهٔ ایمیج', DEPLOYING: 'بالا آمدن کانتینر و بررسی سلامت', READY: 'آماده', FAILED: 'ناموفق', UNHEALTHY: 'کانتینر سالم بالا نیامد', CANCELED: 'لغو شد', TIMEDOUT: 'زمان بیلد تمام شد' }[state] || state;
+      const fa = { QUEUED: 'در صف بیلد', PENDING: 'در صف بیلد', BUILDING: 'در حال بیلد', PUSHING: 'ذخیرهٔ ایمیج', DEPLOYING: 'بالا آمدن کانتینر و بررسی سلامت', READY: 'آماده', FAILED: 'ناموفق', UNHEALTHY: 'کانتینر سالم بالا نیامد', CANCELED: 'لغو شد', TIMEDOUT: 'زمان بیلد تمام شد' }[state] || state;
       onStep({ step: 'build', status: 'running', detail: fa, state });
     }
     if (lines.length) onStep({ step: 'build', status: 'log', lines: lines.map((l) => String(l.line || '').trimEnd()).filter(Boolean).slice(-8) });

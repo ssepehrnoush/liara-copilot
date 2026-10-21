@@ -10,7 +10,7 @@ import { config } from './config.js';
 export const DEFAULT_IGNORES = [
   '.git', '.idea', '.vscode', '.next', '*.*~', 'node_modules', 'bower_components', '.DS_Store',
   'venv', '.venv', '__pycache__', '*.py[cod]', 'vendor', '.env', '.env.*', '!.env.example', 'liara.json',
-  'dist', 'build', 'coverage', '*.log',
+  'dist', 'build', 'coverage', '*.log', 'LIARA_COPILOT_TASK.md',
 ];
 
 const SOURCE_EXT = /\.(m?js|cjs|ts|tsx|jsx|py|php|go|cs|rb|vue|svelte|json|ya?ml|toml|env\.example)$/i;

@@ -12,6 +12,31 @@ function send(p, url, init) {
   return undiciFetch(url, { ...init, dispatcher: agents.get(p.proxy) });
 }
 
+// Per-provider gate: BoxAPI allows 1 concurrent request and 20 per minute for the whole key
+// (shared with the other hackathon apps), so calls wait in line instead of failing.
+const gates = new Map();
+function gate(p) {
+  if (!gates.has(p.name)) gates.set(p.name, { tail: Promise.resolve(), active: 0, starts: [] });
+  return gates.get(p.name);
+}
+async function withGate(p, fn) {
+  if (!p.maxConcurrent && !p.rpm) return fn();
+  const g = gate(p);
+  const run = async () => {
+    if (p.rpm) {
+      const now = Date.now();
+      g.starts = g.starts.filter((t) => now - t < 60000);
+      if (g.starts.length >= p.rpm) await new Promise((r) => setTimeout(r, 60000 - (now - g.starts[0]) + 50));
+      g.starts.push(Date.now());
+    }
+    return fn();
+  };
+  // maxConcurrent is 1 in practice: chain calls one after another.
+  const result = g.tail.then(run, run);
+  g.tail = result.catch(() => {});
+  return result;
+}
+
 function unavailable(msg) {
   const e = new Error(msg);
   e.unavailable = true;
@@ -26,8 +51,7 @@ export async function chat({ messages, tools, onDelta, maxTokens = 2000 }) {
   let lastErr;
   for (const p of chain) {
     try {
-      const res = await open(p, { messages, tools, maxTokens });
-      const out = await readStream(res, onDelta);
+      const out = await withGate(p, async () => readStream(await open(p, { messages, tools, maxTokens }), onDelta));
       config.llm.active = p.name;
       return out;
     } catch (e) {

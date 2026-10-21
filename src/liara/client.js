@@ -104,9 +104,19 @@ export class LiaraApi {
   }
 
   // ---------- account ----------
+  // In team mode /v1/billing still reports the personal wallet; the team wallet is in /v1/me.
   async billing() {
+    if (this.teamID) {
+      const d = await this.req('GET', '/v1/me');
+      return { balance: Number(d?.team?.balance ?? 0), minCredit: d?.team?.minCreditAmount ?? null, account: d?.team?.teamName ? `تیم ${d.team.teamName}` : 'تیم' };
+    }
     const d = await this.req('GET', '/v1/billing');
-    return { balance: Number(d?.user?.balance ?? 0), minCredit: d?.user?.minCreditAmount ?? null };
+    return { balance: Number(d?.user?.balance ?? 0), minCredit: d?.user?.minCreditAmount ?? null, account: 'حساب شخصی' };
+  }
+
+  async teams() {
+    const d = await this.req('GET', '/v2/teams');
+    return (d.teams || []).map((t) => ({ id: t._id, name: t.name }));
   }
 
   async catalog() {
@@ -242,7 +252,15 @@ export class LiaraApi {
     try {
       const d = await this.req('GET', `/v2/projects/${encodeURIComponent(name)}/logs`, { query: { start, direction: 'forward' }, timeoutMs: 20000 });
       for (const entry of d.data || []) {
-        for (const v of entry.values || []) lines.push({ t: toMs(v[0]), line: String(v[1] ?? ''), releaseId: entry.metaData?.releaseId });
+        for (const v of entry.values || []) {
+          // Each value is [ns timestamp, '{"type":"stdout","_entry":"<line>"}'].
+          let line = String(v[1] ?? '');
+          let stream;
+          if (line.startsWith('{')) {
+            try { const j = JSON.parse(line); line = String(j._entry ?? j.log ?? j.message ?? ''); stream = j.type; } catch { /* keep raw */ }
+          }
+          if (line.trim()) lines.push({ t: toMs(v[0]), line, stream, releaseId: entry.metaData?.releaseId });
+        }
       }
     } catch (e) {
       if (e.status === 404) throw e;
@@ -262,9 +280,17 @@ export class LiaraApi {
     return out.sort((a, b) => a.t - b.t);
   }
 
+  // The applets endpoint answered 500 on our account (2026-10-21), so fall back to the
+  // applet ids that the metrics summary reports: one entry per running container.
   async applets(name) {
-    const d = await this.req('GET', `/v1/projects/${encodeURIComponent(name)}/applets`);
-    return (d.applets || []).map((a) => ({ id: a.id, name: a.name, state: a.state, reason: a.reason, since: a.timestamp, releaseTag: a.release?.tag }));
+    try {
+      const d = await this.req('GET', `/v1/projects/${encodeURIComponent(name)}/applets`, { retries: 0 });
+      return (d.applets || []).map((a) => ({ id: a.id, name: a.name, state: a.state, reason: a.reason, since: a.timestamp, releaseTag: a.release?.tag }));
+    } catch (e) {
+      if (e.status === 404) throw e;
+      const s = await this.req('GET', `/v1/projects/${encodeURIComponent(name)}/metrics/summary`);
+      return (s.memoryUsage || []).map((m) => ({ id: m.applet, name, state: 'RUNNING', reason: null, since: null, releaseTag: null, source: 'metrics' }));
+    }
   }
 
   async metricsSummary(name) {

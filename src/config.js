@@ -32,6 +32,8 @@ const providers = {
     apiKey: process.env.BOXAPI_KEY,
     model: (provider === 'boxapi' && process.env.LLM_MODEL) || process.env.BOXAPI_MODEL || 'anthropic/claude-sonnet-5.5',
     proxy: process.env.BOXAPI_PROXY || '',
+    maxConcurrent: Number(process.env.BOXAPI_MAX_CONCURRENT || 1),
+    rpm: Number(process.env.BOXAPI_RPM || 18),
     fastModel: process.env.LLM_FAST_MODEL || 'openai/gpt-4.1-mini',
   },
   openai: {

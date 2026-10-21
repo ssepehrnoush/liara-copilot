@@ -6,7 +6,7 @@ import { systemPrompt } from './prompts.js';
 import { toolByName, toolSchemas, RISK_FA } from './tools/index.js';
 import { audit } from './audit.js';
 import { scrubDeep } from './redact.js';
-import { managedApps } from './scope.js';
+import { managedApps, appInfo } from './scope.js';
 import { config } from './config.js';
 import { runFallback } from './fallback.js';
 import { pokeWatcher } from './watcher.js';
@@ -64,7 +64,8 @@ function clip(obj, max) {
 }
 
 function buildMessages(session) {
-  const sys = { role: 'system', content: systemPrompt({ mode: config.liaraMode, managed: managedApps(), currentApp: session.currentApp, project: session.project }) };
+  const knownPages = managedApps().map((a) => `${a}: ${(appInfo(a)?.watchPaths || ['/']).join(' ')}`).join('; ');
+  const sys = { role: 'system', content: systemPrompt({ mode: config.liaraMode, managed: managedApps(), currentApp: session.currentApp, project: session.project, knownPages }) };
   // Keep the last turns in full, shorten older tool outputs to save context.
   const msgs = session.messages.slice(-60);
   const lastUser = msgs.map((m) => m.role).lastIndexOf('user');

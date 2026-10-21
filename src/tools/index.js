@@ -68,11 +68,29 @@ function mergeInputs(variables = [], inputs = {}) {
     .filter((v) => v.value !== undefined && v.value !== null && v.value !== '');
 }
 
+// Liara's release list has no source id, so the copilot remembers which local folder
+// each release came from; that is what makes a one-click rollback possible.
+function recordDeploy(app, releaseID, dir) {
+  const info = appInfo(app) || {};
+  registerApp(app, { deploys: [...(info.deploys || []), { releaseID, dir: path.resolve(dir), at: new Date().toISOString() }].slice(-20) });
+}
+
+function savedSource(app, releaseID) {
+  const d = (appInfo(app)?.deploys || []).find((x) => x.releaseID === releaseID);
+  return d && fs.existsSync(d.dir) ? d.dir : null;
+}
+
 function watchPathsFrom(routes = []) {
   return ['/', ...routes.filter((r) => r !== '/' && r !== '/health')].slice(0, 4);
 }
 
-async function waitForRunning(liara, app, onStep, timeoutMs = 120000) {
+async function appletIds(liara, app) {
+  try { return (await liara.applets(app)).map((a) => a.id); } catch { return []; }
+}
+
+// Ready = a container that was not there before the action (when ids are known) and the
+// site answers HTTP without a 5xx. Liara keeps serving 503 for a few seconds after READY.
+async function waitForRunning(liara, app, onStep, { before = null, timeoutMs = 150000 } = {}) {
   const t0 = Date.now();
   await new Promise((r) => setTimeout(r, 4000));
   let last = null;
@@ -80,13 +98,31 @@ async function waitForRunning(liara, app, onStep, timeoutMs = 120000) {
     try {
       const applets = await liara.applets(app);
       last = applets;
-      const running = applets.length && applets.every((a) => /running|ready/i.test(a.state || ''));
-      if (running) return { ok: true, applets };
+      const ids = applets.map((a) => a.id);
+      const fresh = !before?.length || ids.some((id) => !before.includes(id));
+      const up = applets.length && applets.every((a) => /running|ready/i.test(a.state || ''));
+      if (up && fresh) {
+        const p = await httpCheck(liara.appUrl(app), { paths: ['/'], samples: 1, timeoutMs: 6000 });
+        const code = Number(Object.keys(p.paths[0]?.codes || {})[0]);
+        if (code > 0 && code < 500) return { ok: true, applets };
+      }
     } catch { /* keep waiting */ }
     onStep?.({ step: 'wait', status: 'running', detail: 'منتظر بالا آمدن دوبارهٔ کانتینر' });
     await new Promise((r) => setTimeout(r, 3000));
   }
   return { ok: false, applets: last };
+}
+
+// After a release is READY, wait until the public URL stops answering 5xx, then probe.
+async function settledProbe(liara, app, paths = ['/']) {
+  const t0 = Date.now();
+  let p;
+  do {
+    p = await httpCheck(liara.appUrl(app), { paths, samples: 1, timeoutMs: 6000 });
+    if (p.ok === p.total) break;
+    await new Promise((r) => setTimeout(r, 3000));
+  } while (Date.now() - t0 < 60000);
+  return httpCheck(liara.appUrl(app), { paths, samples: 3 });
 }
 
 export const tools = [
@@ -99,7 +135,7 @@ export const tools = [
     parameters: { type: 'object', properties: {} },
     async run(_a, { liara }) {
       const [billing, apps] = await Promise.all([liara.billing(), liara.listApps()]);
-      return { balanceToman: Math.round(billing.balance), apps: apps.map((a) => ({ name: a.name, platform: a.platform, status: a.status, scale: a.scale, planID: a.planID, isDeployed: a.isDeployed, managedByCopilot: canModify(a.name) })) };
+      return { account: billing.account, balanceToman: Math.round(billing.balance), apps: apps.map((a) => ({ name: a.name, platform: a.platform, status: a.status, scale: a.scale, planID: a.planID, isDeployed: a.isDeployed, managedByCopilot: canModify(a.name) })) };
     },
   },
   {
@@ -198,8 +234,9 @@ export const tools = [
     description: 'SRE investigation. Gathers in parallel: app status, releases, containers, runtime logs (error signatures, missing env vars, dependency errors), events (OOM, restarts), CPU/RAM trends vs plan limits, and live HTTP probes. Returns ranked hypotheses with evidence and a suggested fix each. Call this FIRST when the user reports slowness, errors, HTTP 500 or downtime.',
     parameters: { type: 'object', properties: { app: { type: 'string' }, symptom: { type: 'string', description: 'User words, e.g. "site is slow" or "500 on checkout"' }, paths: { type: 'array', items: { type: 'string' }, description: 'Pages to probe, include any path the user mentioned' }, minutes: { type: 'number' } }, required: ['app'] },
     async run({ app, symptom, paths, minutes = 30 }, { liara, session }) {
-      const p = [...new Set(['/', ...(paths || [])])];
-      const r = await collectEvidence(liara, app, { minutes, paths: p });
+      // Probe the pages the user named plus the pages the watcher already follows for this app.
+      const p = [...new Set(['/', ...(paths || []), ...(appInfo(app)?.watchPaths || [])])].slice(0, 5);
+      const r = await collectEvidence(liara, app, { minutes, paths: p, lastFixAt: appInfo(app)?.lastFixAt || session.lastFixAt || null });
       session.lastIncident = { id: r.incidentId, app, symptom };
       return { symptom: symptom || null, incidentId: r.incidentId, hypotheses: r.hypotheses, evidence: r.evidence };
     },
@@ -389,11 +426,11 @@ export const tools = [
         step({ step: 'envs', status: 'done', detail: envs.map((e) => e.key).join('، ') });
       }
       const rel = await deployRelease(liara, { app: a.name, dir, port: a.port, platform: a.platform, message: 'First deploy by Liara Copilot' }, step);
+      recordDeploy(a.name, rel.releaseID, dir);
       let probe = null;
       if (rel.state === 'READY') {
         step({ step: 'probe', status: 'running', detail: 'تست آدرس سایت' });
-        await new Promise((r) => setTimeout(r, 2500));
-        probe = await httpCheck(liara.appUrl(a.name), { paths: ['/'], samples: 3 });
+        probe = await settledProbe(liara, a.name);
         step({ step: 'probe', status: probe.ok === probe.total ? 'done' : 'failed', detail: `${fa(probe.ok)} از ${fa(probe.total)} درخواست موفق، ${fa(probe.p50ms)}ms` });
       }
       session.currentApp = a.name;
@@ -435,13 +472,13 @@ export const tools = [
       const dir = /^https?:\/\/(www\.)?github\.com\//i.test(a.source || '') ? await fetchGithub(a.source) : projectDir(a.app, a.source);
       const info = appInfo(a.app) || {};
       const rel = await deployRelease(liara, { app: a.app, dir, port: info.port || 3000, platform: app.platform, message: a.message || 'New version by Liara Copilot' }, step);
+      recordDeploy(a.app, rel.releaseID, dir);
       let routes = null;
       try { routes = (await analyzeProject(dir)).routes; } catch { /* keep old watch paths */ }
       registerApp(a.app, { dir: path.resolve(dir), ...(routes ? { watchPaths: watchPathsFrom(routes) } : {}) });
       let probe = null;
       if (rel.state === 'READY') {
-        await new Promise((r) => setTimeout(r, 2500));
-        probe = await httpCheck(liara.appUrl(a.app), { paths: ['/'], samples: 3 });
+        probe = await settledProbe(liara, a.app);
         step({ step: 'probe', status: probe.ok === probe.total ? 'done' : 'failed', detail: `${fa(probe.ok)} از ${fa(probe.total)} درخواست موفق` });
       }
       session.currentApp = a.app;
@@ -481,11 +518,14 @@ export const tools = [
       const merged = new Map(app.envs.map((e) => [e.key, e.value]));
       for (const u of updates) merged.set(u.key, u.value);
       step({ step: 'envs', status: 'running', detail: 'ثبت متغیرها در لیارا' });
+      const before = await appletIds(liara, a.app);
       await liara.updateEnvs(a.app, [...merged.entries()].map(([key, value]) => ({ key, value })));
       session.lastFixAt = Date.now();
+      registerApp(a.app, { lastFixAt: session.lastFixAt });
       step({ step: 'envs', status: 'done', detail: updates.map((u) => u.key).join('، ') });
-      const w = await waitForRunning(liara, a.app, step);
+      const w = await waitForRunning(liara, a.app, step, { before });
       session.lastFixAt = Date.now();
+      registerApp(a.app, { lastFixAt: session.lastFixAt });
       step({ step: 'wait', status: w.ok ? 'done' : 'failed', detail: w.ok ? 'اپ دوباره بالا آمد' : 'اپ هنوز بالا نیامده' });
       return { ok: true, updatedKeys: updates.map((u) => u.key), valuesHidden: true, running: w.ok };
     },
@@ -514,11 +554,14 @@ export const tools = [
     async run(a, { liara, step, session }) {
       requireScope(a.app);
       step({ step: 'restart', status: 'running', detail: 'ارسال دستور ری‌استارت' });
+      const before = await appletIds(liara, a.app);
       await liara.restart(a.app);
       session.lastFixAt = Date.now();
+      registerApp(a.app, { lastFixAt: session.lastFixAt });
       step({ step: 'restart', status: 'done', detail: 'دستور پذیرفته شد' });
-      const w = await waitForRunning(liara, a.app, step);
+      const w = await waitForRunning(liara, a.app, step, { before });
       session.lastFixAt = Date.now();
+      registerApp(a.app, { lastFixAt: session.lastFixAt });
       step({ step: 'wait', status: w.ok ? 'done' : 'failed', detail: w.ok ? 'اپ دوباره بالا آمد' : 'اپ هنوز بالا نیامده' });
       return { ok: true, running: w.ok };
     },
@@ -541,8 +584,8 @@ export const tools = [
           { kind: 'downtime', text: 'چند ثانیه قطعی هنگام جابه‌جایی نسخه.' },
           { kind: 'note', text: 'تغییرات کد نسخهٔ جدید تا انتشار دوباره از دسترس خارج می‌شود.' },
         ],
-        steps: ['پیدا کردن سورس نسخهٔ قبلی', 'ساخت ریلیز از همان سورس', 'بررسی سلامت'],
-        blocked: !target ? { reasonFa: 'این ریلیز پیدا نشد.' } : target.sourceAvailable === false ? { reasonFa: 'سورس این ریلیز در لیارا نگه داشته نشده و API امکان برگشت مستقیم ندارد. باید نسخهٔ قبلی را از گیت دوباره دیپلوی کرد.' } : null,
+        steps: ['پیدا کردن سورس همان ریلیز (از لیارا یا از پوشه‌ای که کوپایلت با آن دیپلوی کرده)', 'ساخت ریلیز تازه از همان سورس', 'بررسی سلامت'],
+        blocked: !target ? { reasonFa: 'این ریلیز پیدا نشد.' } : !target.sourceID && !savedSource(a.app, a.releaseID) ? { reasonFa: 'API لیارا سورس ریلیزهای قبلی را برنمی‌گرداند و این ریلیز با کوپایلت ساخته نشده، پس سورسش را ندارم. نسخهٔ قبلی را از گیت دوباره دیپلوی کنید.' } : null,
         reasonFa: a.reason,
       };
     },
@@ -550,12 +593,24 @@ export const tools = [
       requireScope(a.app);
       const { releases } = await liara.listReleases(a.app, 10);
       const target = releases.find((r) => r.id === a.releaseID);
-      if (!target?.sourceID) return { ok: false, error: 'API لیارا شناسهٔ سورس این ریلیز را برنگرداند؛ برگشت خودکار ممکن نیست.' };
-      step({ step: 'release', status: 'running', detail: `استقرار دوبارهٔ ${target.tag || target.id}` });
-      const releaseID = await liara.createRelease(a.app, { sourceID: target.sourceID, port: target.port, type: target.platform, message: `Rollback to ${target.tag || target.id} by Liara Copilot` });
+      if (!target) return { ok: false, error: 'این ریلیز پیدا نشد.' };
+      if (target.sourceID) {
+        step({ step: 'release', status: 'running', detail: `استقرار دوبارهٔ ${target.tag || target.id}` });
+        const releaseID = await liara.createRelease(a.app, { sourceID: target.sourceID, port: target.port, type: target.platform, message: `Rollback to ${target.tag || target.id} by Liara Copilot` });
+        session.lastFixAt = Date.now();
+      registerApp(a.app, { lastFixAt: session.lastFixAt });
+        step({ step: 'release', status: 'done', detail: String(releaseID).slice(0, 10) });
+        return { ok: true, releaseID };
+      }
+      const dir = savedSource(a.app, a.releaseID);
+      if (!dir) return { ok: false, error: 'سورس این ریلیز در دسترس نیست؛ برگشت خودکار ممکن نیست.' };
+      const app = await liara.getApp(a.app);
+      const rel = await deployRelease(liara, { app: a.app, dir, port: target.port || appInfo(a.app)?.port || 3000, platform: target.platform || app.platform, message: `Rollback to ${target.tag || target.id} by Liara Copilot` }, step);
+      recordDeploy(a.app, rel.releaseID, dir);
+      registerApp(a.app, { dir });
       session.lastFixAt = Date.now();
-      step({ step: 'release', status: 'done', detail: String(releaseID).slice(0, 10) });
-      return { ok: true, releaseID };
+      registerApp(a.app, { lastFixAt: session.lastFixAt });
+      return { ok: rel.state === 'READY', releaseState: rel.state, rolledBackTo: target.tag || target.id };
     },
   },
   {
@@ -590,11 +645,14 @@ export const tools = [
     async run(a, { liara, step, session }) {
       requireScope(a.app);
       step({ step: 'resize', status: 'running', detail: `تغییر به ${a.planID}` });
+      const before = await appletIds(liara, a.app);
       await liara.resize(a.app, a.planID, a.bundlePlanID);
       session.lastFixAt = Date.now();
+      registerApp(a.app, { lastFixAt: session.lastFixAt });
       step({ step: 'resize', status: 'done', detail: 'پذیرفته شد' });
-      const w = await waitForRunning(liara, a.app, step);
+      const w = await waitForRunning(liara, a.app, step, { before });
       session.lastFixAt = Date.now();
+      registerApp(a.app, { lastFixAt: session.lastFixAt });
       return { ok: true, running: w.ok };
     },
   },
@@ -641,10 +699,13 @@ export const tools = [
     },
     async run(a, { liara, step, session }) {
       requireScope(a.app);
+      const before = await appletIds(liara, a.app);
       await liara.scale(a.app, 1);
       session.lastFixAt = Date.now();
-      const w = await waitForRunning(liara, a.app, step);
+      registerApp(a.app, { lastFixAt: session.lastFixAt });
+      const w = await waitForRunning(liara, a.app, step, { before });
       session.lastFixAt = Date.now();
+      registerApp(a.app, { lastFixAt: session.lastFixAt });
       return { ok: true, running: w.ok };
     },
   },

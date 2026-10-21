@@ -106,6 +106,7 @@ async function buildStatus() {
   return {
     mode: config.liaraMode,
     balance: billing.error ? null : Math.round(billing.balance),
+    account: billing.error ? null : billing.account,
     balanceError: billing.error || null,
     appsError: apps.error || null,
     apps: detailed.sort((x, y) => Number(y.managed) - Number(x.managed)),

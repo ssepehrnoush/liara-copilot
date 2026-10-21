@@ -201,7 +201,7 @@ export class LiaraSim {
 
   // ---------- normalized API ----------
   async billing() {
-    return { balance: this.balance, minCredit: 20000 };
+    return { balance: this.balance, minCredit: 20000, account: 'حساب شبیه‌ساز' };
   }
 
   async catalog() {
@@ -338,7 +338,7 @@ export class LiaraSim {
     const app = this.must(name);
     if (!app.currentRelease || app.scale === 0) return [];
     const rel = this.releases.get(app.currentRelease);
-    return [{ id: `${app.name}-${app.currentRelease.slice(0, 6)}`, name: app.name, state: app.proc ? 'RUNNING' : 'RESTARTING', reason: app.restarts ? `restarts: ${app.restarts}` : null, since: new Date(app.startedAt || Date.now()).toISOString(), releaseTag: rel?.tag }];
+    return [{ id: `${app.name}-${app.currentRelease.slice(0, 6)}-${app.startedAt || 0}`, name: app.name, state: app.proc ? 'RUNNING' : 'RESTARTING', reason: app.restarts ? `restarts: ${app.restarts}` : null, since: new Date(app.startedAt || Date.now()).toISOString(), releaseTag: rel?.tag }];
   }
 
   async metricsSummary(name) {

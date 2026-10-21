@@ -128,7 +128,7 @@ function iso(t) {
   return t ? new Date(t).toISOString() : null;
 }
 
-export async function collectEvidence(liara, appName, { minutes = 30, paths = ['/'], planCatalog } = {}) {
+export async function collectEvidence(liara, appName, { minutes = 30, paths = ['/'], planCatalog, lastFixAt = null } = {}) {
   const nowSec = Math.floor(Date.now() / 1000);
   const since = nowSec - minutes * 60;
   const app = await liara.getApp(appName);
@@ -148,8 +148,14 @@ export async function collectEvidence(liara, appName, { minutes = 30, paths = ['
   const ramLimit = (plan?.ramGB || null) && plan.ramGB * 1024 * MB;
   const cpuLimit = plan?.cpu || null;
   const logA = logs.ok ? analyzeLogs(logs.v, app.envs.map((e) => e.key)) : null;
-  const memS = mem.ok ? seriesStats(mem.v) : null;
-  let cpuS = cpu.ok ? seriesStats(cpu.v) : null;
+  // Trends only count the current container: points before the last release or fix
+  // belong to a container that no longer runs (and would fake a leak or hide a recovery).
+  const lastRel = releases.ok ? releases.v.releases[0] : null;
+  const relAt = lastRel ? Date.parse(lastRel.finishedAt || lastRel.createdAt) || 0 : 0;
+  const cut = Math.max(relAt, lastFixAt || 0) + 20000;
+  const current = (pts) => (cut > since * 1000 ? pts.filter((p) => p.t >= cut) : pts);
+  const memS = mem.ok ? seriesStats(current(mem.v)) : null;
+  let cpuS = cpu.ok ? seriesStats(current(cpu.v)) : null;
   // CPU may come back as cores or as percent depending on the endpoint; normalise to % of plan.
   let cpuPct = null;
   if (cpuS && cpuLimit) {
@@ -174,6 +180,7 @@ export async function collectEvidence(liara, appName, { minutes = 30, paths = ['
     releases: rel.slice(0, 4).map((r) => ({ id: r.id, tag: r.tag, state: r.state, createdAt: r.createdAt, finishedAt: r.finishedAt, sourceAvailable: r.sourceAvailable })),
     applets: applets.ok ? applets.v : { error: applets.e },
     logs: logA ? { lines: logA.total, errors: logA.errorCount, firstErrorAt: iso(logA.firstErrorAt), topErrors: logA.top.map((g) => ({ count: g.count, first: iso(g.first), last: iso(g.last), sample: g.sample, stack: g.context })), missingEnv: logA.missingEnv, dependencyErrors: logA.depErrors, accessCodes: logA.accessCodes, growingCounters: logA.growing, latencyTrend: logA.latencyTrend } : { error: logs.e },
+    trendSince: cut > since * 1000 ? iso(cut) : null,
     memory: memS ? { firstMB: Math.round(memS.first / MB), lastMB: Math.round(memS.last / MB), maxMB: Math.round(memS.max / MB), slopeMBperMin: Math.round((memS.slopePerMin / MB) * 10) / 10, trendR2: Math.round(memS.r2 * 100) / 100, pctOfLimit: ramLimit ? Math.round((memS.last / ramLimit) * 100) : null, maxPctOfLimit: ramLimit ? Math.round((memS.max / ramLimit) * 100) : null, spanMin: memS.spanMin } : { error: mem.ok ? 'no data' : mem.e },
     cpu: cpuS ? { avgPctOfPlan: cpuPct?.avg ?? null, maxPctOfPlan: cpuPct?.max ?? null, points: cpuS.points } : { error: cpu.ok ? 'no data' : cpu.e },
     summaryNow: summary.ok ? { cpu: summary.v.cpu, memoryMB: Math.round((summary.v.memoryBytes || 0) / MB) } : null,
@@ -183,7 +190,8 @@ export async function collectEvidence(liara, appName, { minutes = 30, paths = ['
 
   // Errors logged before the current container started belong to an older container.
   const starts = (applets.ok ? applets.v : []).map((a) => Date.parse(a.since)).filter((t) => !Number.isNaN(t));
-  const containerStart = starts.length ? Math.max(...starts) : null;
+  // Without container start times (metrics fallback), the last approved fix marks the cut.
+  const containerStart = starts.length ? Math.max(...starts) : lastFixAt;
   evidence.containerStartedAt = iso(containerStart);
   const hypotheses = rankHypotheses(evidence, { latest, prevReady, containerStart });
   const id = `inc-${++incidentSeq}`;
@@ -211,6 +219,8 @@ function rankHypotheses(ev, { latest, prevReady, containerStart }) {
   const pathsOk = (ev.probe?.paths || []).every((p) => p.ok === p.samples);
   for (const m of ev.logs?.missingEnv || []) {
     if (containerStart && m.last && m.last < containerStart && pathsOk) continue; // already fixed by a restart/env change
+    const no5xx = (ev.probe?.paths || []).every((p) => !p.errors5xx);
+    if (m.presentInApp && (pathsOk || no5xx)) continue; // the variable exists now and nothing returns 5xx: old errors
     H.push({
       id: 'missing_env',
       title: `متغیر محیطی ${m.key} تنظیم نشده`,
@@ -304,12 +314,29 @@ export async function verifyRecovery(liara, appName, incidentId, { sinceMs } = {
   const paths = inc?.paths || ['/'];
   const fromMs = sinceMs || Date.now() - 120000;
   const fromSec = Math.floor(fromMs / 1000);
-  const [probe, logs, mem] = await Promise.all([
-    httpCheck(liara.appUrl(appName), { paths, samples: 5 }),
-    settle(liara.logs(appName, { startSec: fromSec, limit: 300 })),
+  // Right after a restart Liara can still route some requests to the old container, so
+  // probe in rounds until one round is fully healthy (or about 45 s pass), and judge that.
+  const rounds = [];
+  let probe;
+  let settledAt = null;
+  const t0 = Date.now();
+  for (;;) {
+    const roundStart = Date.now();
+    probe = await httpCheck(liara.appUrl(appName), { paths, samples: 4 });
+    rounds.push({ ok: probe.ok, total: probe.total });
+    if (probe.ok === probe.total) { settledAt = roundStart; break; }
+    if (Date.now() - t0 > 45000) break;
+    await new Promise((r) => setTimeout(r, 6000));
+  }
+  const [logs, mem] = await Promise.all([
+    settle(liara.logs(appName, { startSec: fromSec, limit: 400 })),
     settle(liara.metricsSummary(appName)),
   ]);
-  const errorsAfter = logs.ok ? logs.v.filter((l) => (l.t || 0) >= fromMs && ERROR_RE.test(l.line) && !/\b(GET|POST)\s+\S+\s+[23]\d\d\b/.test(l.line)).length : null;
+  const countFrom = settledAt || fromMs;
+  const isErr = (l) => ERROR_RE.test(l.line) && !/\b(GET|POST)\s+\S+\s+[23]\d\d\b/.test(l.line);
+  const errorsAfter = logs.ok ? logs.v.filter((l) => (l.t || 0) >= countFrom && isErr(l)).length : null;
+  const errorsDuringSwitch = logs.ok && settledAt ? logs.v.filter((l) => (l.t || 0) >= fromMs && (l.t || 0) < settledAt && isErr(l)).length : 0;
+  const transientFailures = rounds.slice(0, -1).reduce((a, r) => a + (r.total - r.ok), 0);
   const memNow = mem.ok && mem.v.memoryBytes ? Math.round(mem.v.memoryBytes / MB) : null;
   const before = inc?.baseline || {};
   const okBefore = before.probe?.total ? Math.round((before.probe.ok / before.probe.total) * 100) : null;
@@ -324,6 +351,7 @@ export async function verifyRecovery(liara, appName, incidentId, { sinceMs } = {
     verdictFa: { recovered: 'مشکل برطرف شد', improved: 'بهتر شده ولی کامل نه', not_recovered: 'هنوز برطرف نشده' }[verdict],
     before: inc ? { successPct: okBefore, p50ms: before.probe?.p50ms ?? null, errorsInLogs: before.errors, memoryMB: before.memory?.lastMB ?? null } : null,
     after: { successPct: okAfter, p50ms: probe.p50ms, errorsInLogsSinceFix: errorsAfter, memoryMB: memNow },
+    switchover: transientFailures || errorsDuringSwitch ? { failedProbes: transientFailures, errorLines: errorsDuringSwitch, noteFa: 'چند درخواست در چند ثانیهٔ جابه‌جایی کانتینر قدیم و جدید خطا گرفت؛ بعد از آن همه سالم بودند.' } : null,
     probe,
   };
 }

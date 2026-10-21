@@ -287,6 +287,7 @@
         row('خطا در لاگ', faNum(b.errorsInLogs), a.errorsInLogsSinceFix === null ? '-' : `${faNum(a.errorsInLogsSinceFix)} (بعد از اصلاح)`),
         row('مصرف رم', b.memoryMB ? `${faNum(b.memoryMB)}MB` : '-', a.memoryMB ? `${faNum(a.memoryMB)}MB` : '-'),
       ),
+      d.switchover ? h('div', { class: 'small-muted' }, d.switchover.noteFa) : null,
     );
   }
 
@@ -419,7 +420,7 @@
     await Promise.all(managed.map((a) => (force || !metricCache.has(a.name) || Date.now() - metricCache.get(a.name).at > 12000 ? loadMetrics(a.name) : null)));
     const cards = s.apps.map((a) => appCard(a));
     box.replaceChildren(
-      h('div', { class: 'account' }, h('div', {}, h('div', { class: 'small-muted' }, 'موجودی حساب لیارا'), h('div', { class: 'big' }, toman(s.balance))),
+      h('div', { class: 'account' }, h('div', {}, h('div', { class: 'small-muted' }, `موجودی ${s.account || 'حساب لیارا'}`), h('div', { class: 'big' }, toman(s.balance))),
         h('div', { class: 'small-muted' }, s.mode === 'sim' ? 'حالت شبیه‌ساز محلی' : 'متصل به api.liara.ir', h('br'), `${faNum(s.apps.length)} سرویس`)),
       ...(cards.length ? cards : [h('div', { class: 'empty' }, 'هنوز سرویسی در حساب نیست. پروژه‌تان را بدهید تا اولین سرویس را بسازیم.')]),
     );
