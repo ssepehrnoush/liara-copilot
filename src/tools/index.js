@@ -10,7 +10,7 @@ import { httpCheck } from '../probe.js';
 import { collectEvidence, verifyRecovery } from '../diagnose.js';
 import { maskEnvs, isSecretKey } from '../redact.js';
 import { registerApp, appInfo, canModify } from '../scope.js';
-import { LIMITS, planEdits, applyPlan, restore, syntaxError } from '../codefix.js';
+import { LIMITS, planEdits, applyPlan, restore, syntaxError, plannedSyntaxError } from '../codefix.js';
 
 const MB = 1024 * 1024;
 const fa = (n) => (n === null || n === undefined ? '-' : Number(n).toLocaleString('fa-IR', { maximumFractionDigits: 1 }));
@@ -565,6 +565,8 @@ export const tools = [
       const dir = projectDir(a.app);
       if (!dir) throw new Error('پوشهٔ سورس این اپ را ندارم؛ مسیر پروژه را بدهید یا اصلاح را به ایجنت کدنویس بسپارید.');
       const plan = planEdits(dir, a.edits);
+      const bad = plannedSyntaxError(dir, plan);
+      if (bad) throw new Error(`کد پیشنهادی در ${bad.file} سینتکس درستی ندارد و کارت تأیید نشان داده نشد. ${bad.message}`);
       const rel = await liara.listReleases(a.app, 1).catch(() => ({ releases: [] }));
       const app = await liara.getApp(a.app);
       return {

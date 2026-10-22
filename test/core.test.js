@@ -10,7 +10,7 @@ import { collectEvidence } from '../src/diagnose.js';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { planEdits, applyPlan, restore, syntaxError } from '../src/codefix.js';
+import { planEdits, applyPlan, restore, syntaxError, plannedSyntaxError } from '../src/codefix.js';
 import { findGrowingCollection } from '../src/analyzer.js';
 import { callCost } from '../src/llm.js';
 import { SYSTEM_PROMPT, contextNote } from '../src/prompts.js';
@@ -213,4 +213,15 @@ test('model view: a slim diagnosis keeps causes, key numbers and security notice
   assert.equal(slim.evidence.logs.topErrors.length, 3);
   assert.equal(slim.evidence.logs.topErrors[0].stack.length, 2);
   assert.equal(toolByName.verify_recovery.forModel({ verdict: 'recovered', probe: { paths: [] } }).probe, undefined);
+});
+
+test('code fix: an edit that would not parse is caught before the approval card, files untouched', () => {
+  const dir = shopCopy();
+  const before = fs.readFileSync(path.join(dir, 'trending.js'), 'utf8');
+  const persianDigits = planEdits(dir, [{ file: 'trending.js', find: '  viewHistory.push({', replace: '  if (viewHistory.length > ۲۰) viewHistory.shift();\n  viewHistory.push({' }]);
+  assert.equal(plannedSyntaxError(dir, persianDigits)?.file, 'trending.js');
+  const fine = planEdits(dir, [{ file: 'trending.js', find: '  viewHistory.push({', replace: '  if (viewHistory.length > 20) viewHistory.shift();\n  viewHistory.push({' }]);
+  assert.equal(plannedSyntaxError(dir, fine), null, 'ES module syntax still parses next to its package.json');
+  assert.equal(fs.readFileSync(path.join(dir, 'trending.js'), 'utf8'), before);
+  assert.deepEqual(fs.readdirSync(dir).filter((f) => f.startsWith('.lc-check')), []);
 });

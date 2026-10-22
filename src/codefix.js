@@ -97,3 +97,20 @@ export function syntaxError(dir, files) {
   }
   return null;
 }
+
+// The same check on the planned text before anything is written, so the approval card never
+// offers an edit that does not even parse. The probe file sits next to the original to keep
+// its module type (the nearest package.json "type").
+export function plannedSyntaxError(dir, plan) {
+  for (const rel of plan.files.filter((f) => JS_EXT.test(f))) {
+    const probe = path.join(path.dirname(rel), `.lc-check-${process.pid}-${path.basename(rel)}`);
+    fs.writeFileSync(path.join(dir, probe), plan.next.get(rel).text);
+    try {
+      const bad = syntaxError(dir, [probe]);
+      if (bad) return { file: rel, message: bad.message };
+    } finally {
+      fs.rmSync(path.join(dir, probe), { force: true });
+    }
+  }
+  return null;
+}
