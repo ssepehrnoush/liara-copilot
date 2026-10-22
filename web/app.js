@@ -21,7 +21,7 @@
   const ICONS = {
     get_account_overview: '💳', list_plans: '📋', analyze_project: '🔍', get_app_status: '📊', get_logs: '📜', get_metrics: '📈', http_check: '🌐',
     investigate_incident: '🩺', verify_recovery: '✅', search_project_code: '🔎', read_project_file: '📄', handoff_to_coding_agent: '🤝', get_domain_guide: '🌍',
-    deploy_new_app: '🚀', deploy_new_version: '📦', fix_code: '🛠️', set_env_vars: '🔑', restart_app: '🔄', rollback_release: '↩️', change_plan: '⚙️', stop_app: '⏹️', start_app: '▶️', add_domain: '🌍',
+    deploy_new_app: '🚀', deploy_new_version: '📦', fix_code: '🛠️', set_env_vars: '🔑', restart_app: '🔄', rollback_release: '↩️', change_plan: '⚙️', stop_app: '⏹️', start_app: '▶️', add_domain: '🌍', create_rule: '⚙️', list_rules: '⚙️', disable_rule: '⏸️',
   };
   const IMPACT_ICON = { cost: '💰', downtime: '⏱️', restart: '🔄', reversible: '↩️', security: '🔒', note: 'ℹ️' };
 
@@ -163,6 +163,9 @@
           h('h4', {}, '🛡️ تلاش برای تزریق دستور شناسایی شد'),
           h('div', {}, `در ${ev.app ? `لاگ‌ها یا فایل‌های ${ev.app}` : 'متن خوانده‌شده'} متنی هست که سعی می‌کند به هوش مصنوعی دستور بدهد. کوپایلت این متن را فقط داده حساب کرد؛ هیچ ابزاری به خاطر آن اجرا نمی‌شود و هر تغییری همچنان کارت تأیید شما را لازم دارد.`),
           h('pre', {}, ev.samples.join('\n'))));
+        break;
+      case 'rule':
+        renderRule(ev);
         break;
       case 'usage': {
         // Running model cost of this conversation (the audit tab has one row per turn).
@@ -440,6 +443,29 @@
     } catch { /* ignore */ }
   }
 
+  // A standing rule fired: one card per run, updated from "running" to its result.
+  const ruleCards = new Map();
+  const RULE_STATUS = { running: ['در حال اجرا', 'medium'], done: ['انجام شد', 'ok'], error: ['خطا', 'error'], limit: ['سقف این ساعت پر شد', 'alert'], refused: ['اجرا نشد', 'error'] };
+  function renderRule(ev) {
+    const [stFa, stCls] = RULE_STATUS[ev.status] || [ev.status, ''];
+    const hyps = ev.data?.hypotheses || [];
+    const body = [
+      h('h4', {}, '⚙️ قانون خودکار', h('span', { class: `badge ${stCls}` }, stFa)),
+      h('div', { class: 'sub' }, ev.ruleFa),
+      h('div', {}, h('b', {}, 'چه دید: '), ev.readingFa),
+      h('div', {}, h('b', {}, 'نتیجه: '), ev.resultFa),
+      hyps.length ? h('ol', { class: 'rule-hyps' }, ...hyps.map((x) => h('li', {}, `${x.title} (${faNum(x.confidence)}٪): ${x.evidence}`))) : null,
+      ev.status !== 'limit' && ev.status !== 'refused' ? h('div', { class: 'small-muted' }, `${faNum(ev.firedThisHour)} از ${faNum(ev.maxPerHour)} بار مجاز در این ساعت · ثبت در گزارش اقدامات`) : null,
+      ev.status === 'done' && ev.action !== 'notify' ? h('div', { class: 'actions' }, h('button', { class: 'primary small', onclick: () => sendText(`قانون خودکار روی ${ev.app} اجرا شد («${ev.readingFa}»). علت اصلی را بررسی کن.`) }, 'بررسی کن')) : null,
+    ];
+    // A run moves from running to done or error on one card; a hold-back notice gets its own.
+    const key = ['running', 'done', 'error'].includes(ev.status) ? `${ev.ruleId}:${ev.firedThisHour}` : `${ev.ruleId}:${ev.status}:${ev.seq}`;
+    const old = ruleCards.get(key);
+    if (old) old.replaceChildren(...body.filter(Boolean));
+    else ruleCards.set(key, add(h('div', { class: 'card rule' }, ...body)));
+    if (ev.status !== 'running') refreshStatus(true);
+  }
+
   async function refreshStatus(force) {
     let s;
     try { s = await api('/api/status'); } catch { return; }
@@ -449,9 +475,15 @@
     const managed = s.apps.filter((a) => a.managed);
     await Promise.all(managed.map((a) => (force || !metricCache.has(a.name) || Date.now() - metricCache.get(a.name).at > 12000 ? loadMetrics(a.name) : null)));
     const cards = s.apps.map((a) => appCard(a));
+    const rules = s.rules?.length ? h('div', { class: 'rules' },
+      h('div', { class: 'rules-h' }, '⚙️ قانون‌های خودکار'),
+      ...s.rules.map((r) => h('div', { class: 'rule-row' },
+        h('div', {}, r.fa, h('div', { class: 'small-muted' }, r.lastFiredAt ? `آخرین اجرا ${time(r.lastFiredAt)} · ${faNum(r.firedLastHour)} بار در ساعت اخیر` : 'هنوز اجرا نشده')),
+        h('button', { class: 'ghost small', title: 'این قانون دیگر اجرا نمی‌شود', onclick: async () => { await api(`/api/rules/${r.id}/disable`, { method: 'POST' }).catch(() => null); refreshStatus(true); } }, 'خاموش')))) : null;
     box.replaceChildren(
       h('div', { class: 'account' }, h('div', {}, h('div', { class: 'small-muted' }, `موجودی ${s.account || 'حساب لیارا'}`), h('div', { class: 'big' }, toman(s.balance))),
         h('div', { class: 'small-muted' }, s.mode === 'sim' ? 'حالت شبیه‌ساز محلی' : 'متصل به api.liara.ir', h('br'), `${faNum(s.apps.length)} سرویس`)),
+      ...(rules ? [rules] : []),
       ...(cards.length ? cards : [h('div', { class: 'empty' }, 'هنوز سرویسی در حساب نیست. پروژه‌تان را بدهید تا اولین سرویس را بسازیم.')]),
     );
   }
@@ -511,8 +543,8 @@
     if (r?.killSwitch) setKill(r.killSwitch);
   });
 
-  const KIND_FA = { security_alert: ['امنیتی', 'error'], kill_switch_on: ['توقف اضطراری', 'error'], kill_switch_off: ['فعال‌سازی دوباره', 'ok'], auto: ['خودکار', 'auto'], approved: ['تأییدشده', 'approved'], rejected: ['رد شد', 'rejected'], approval_requested: ['درخواست تأیید', 'medium'], alert: ['هشدار', 'alert'], refused: ['خارج از محدوده', 'error'], llm_usage: ['هزینهٔ مدل', 'auto'] };
-  const ACTOR = { agent: '🤖', user: '👤', watcher: '👁️' };
+  const KIND_FA = { security_alert: ['امنیتی', 'error'], kill_switch_on: ['توقف اضطراری', 'error'], kill_switch_off: ['فعال‌سازی دوباره', 'ok'], auto: ['خودکار', 'auto'], approved: ['تأییدشده', 'approved'], rejected: ['رد شد', 'rejected'], approval_requested: ['درخواست تأیید', 'medium'], alert: ['هشدار', 'alert'], refused: ['خارج از محدوده', 'error'], llm_usage: ['هزینهٔ مدل', 'auto'], rule_fired: ['قانون خودکار', 'auto'], rule_skipped: ['قانون: سقف پر شد', 'alert'], rule_disabled: ['قانون خاموش شد', 'ok'] };
+  const ACTOR = { agent: '🤖', user: '👤', watcher: '👁️', rule: '⚙️' };
   function auditRow(e) {
     const [k, cls] = KIND_FA[e.kind] || [e.kind, ''];
     return h('div', { class: 'aud' },

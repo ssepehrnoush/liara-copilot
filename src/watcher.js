@@ -49,7 +49,9 @@ export function pokeWatcher(delayMs = 4000) {
   pokeTimer = setTimeout(() => runNow?.(), delayMs);
 }
 
-export function startWatcher(liara, onAlert) {
+// onChecked(app, snapshot) runs after each app check without holding up the next one; the
+// standing rules hang off it.
+export function startWatcher(liara, onAlert, onChecked) {
   let tick = 0;
   const run = async () => {
     tick++;
@@ -77,6 +79,7 @@ export function startWatcher(liara, onAlert) {
       const j = judge(h);
       const prev = h.level;
       h.level = j.level;
+      onChecked?.(name, { level: j.level, fa: j.fa, mem: h.mem, probes: h.probes.slice(-3) })?.catch?.(() => {});
       if ((j.level === 'down' || j.level === 'degraded') && (prev !== j.level || Date.now() - h.lastAlertAt > 5 * 60 * 1000)) {
         h.lastAlertAt = Date.now();
         h.alert = { app: name, level: j.level, fa: j.fa, at: Date.now() };

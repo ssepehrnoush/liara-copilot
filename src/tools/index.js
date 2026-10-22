@@ -11,6 +11,7 @@ import { collectEvidence, verifyRecovery } from '../diagnose.js';
 import { maskEnvs, isSecretKey } from '../redact.js';
 import { registerApp, appInfo, canModify } from '../scope.js';
 import { LIMITS, planEdits, applyPlan, restore, syntaxError, plannedSyntaxError } from '../codefix.js';
+import { addRule, listRules, disableRule, checkRule, describeRule, TRIGGERS, ACTIONS } from '../rules.js';
 
 const MB = 1024 * 1024;
 const fa = (n) => (n === null || n === undefined ? '-' : Number(n).toLocaleString('fa-IR', { maximumFractionDigits: 1 }));
@@ -893,6 +894,84 @@ export const tools = [
       requireScope(a.app);
       const d = await liara.addDomain(a.app, a.domain);
       return { ok: true, domain: a.domain, id: d?._id || d?.id || null, next: 'رکورد DNS را طبق راهنما در پنل ثبت‌کننده تنظیم کنید.' };
+    },
+  },
+  // ------------------------------------------------------------ standing rules
+  {
+    name: 'create_rule',
+    labelFa: 'قانون خودکار تازه',
+    risk: 'medium',
+    description: 'Make a standing rule the health watcher runs on its own after this one approval, for repetitive operations: "whenever RAM passes 85% restart and tell me", "if the site goes down investigate", "report every 6 hours". Triggers: ram_above (percent of plan RAM), down, errors_above (percent of probes failing), every_hours. Actions: notify, investigate, restart (restart only with a ram, down or errors trigger). Plan changes, rollbacks and code fixes can never be automated.',
+    parameters: {
+      type: 'object',
+      properties: {
+        app: { type: 'string' },
+        trigger: { type: 'object', properties: { type: { type: 'string', enum: Object.keys(TRIGGERS) }, value: { type: 'number', description: 'Percent for ram_above / errors_above, hours for every_hours; omit for down' } }, required: ['type'] },
+        action: { type: 'string', enum: Object.keys(ACTIONS) },
+        maxPerHour: { type: 'number', description: '1 to 4, default 1' },
+        reason: { type: 'string' },
+      },
+      required: ['app', 'trigger', 'action'],
+    },
+    async preview(a) {
+      requireScope(a.app);
+      const rule = { app: a.app, trigger: a.trigger, action: a.action, maxPerHour: a.maxPerHour || 1 };
+      checkRule(rule);
+      return {
+        titleFa: 'قانون خودکار تازه',
+        summaryFa: describeRule(rule),
+        changes: [
+          { label: 'اپ', after: a.app },
+          { label: 'شرط', after: TRIGGERS[a.trigger.type].fa(a.trigger.value) },
+          { label: 'کار', after: ACTIONS[a.action] },
+          { label: 'سقف', after: a.trigger.type === 'every_hours' ? '-' : `حداکثر ${fa(rule.maxPerHour)} بار در ساعت` },
+        ],
+        impacts: [
+          { kind: 'note', text: 'از این به بعد ناظر سلامت بدون پرسیدن دوباره همین کار را انجام می‌دهد، هر بار در گزارش اقدامات ثبت و در گفتگو خبر می‌دهد. ناظر تا وقتی کوپایلت روشن است کار می‌کند.' },
+          ...(a.action === 'restart' ? [{ kind: 'downtime', text: 'هر ری‌استارت چند ثانیه قطعی دارد و راه موقت است، نه رفع علت.' }] : []),
+          { kind: 'reversible', text: 'از پنل وضعیت یا با گفتن «این قانون را خاموش کن» غیرفعال می‌شود. توقف اضطراری هم ری‌استارت خودکار را متوقف می‌کند.' },
+        ],
+        steps: ['ثبت قانون', 'بررسی در هر نوبت ناظر سلامت (هر ۲۰ ثانیه)'],
+        reasonFa: a.reason,
+      };
+    },
+    async run(a) {
+      requireScope(a.app);
+      const r = addRule({ app: a.app, trigger: a.trigger, action: a.action, maxPerHour: a.maxPerHour || 1 });
+      return { ok: true, ruleId: r.id, ruleFa: describeRule(r) };
+    },
+  },
+  {
+    name: 'list_rules',
+    labelFa: 'قانون‌های خودکار',
+    risk: 'auto',
+    description: 'List the active standing rules and how often each fired in the last hour.',
+    parameters: { type: 'object', properties: { app: { type: 'string' } } },
+    async run({ app }) {
+      return { rules: listRules({ app }).map((r) => ({ id: r.id, app: r.app, fa: r.fa, firedLastHour: r.firedLastHour })) };
+    },
+  },
+  {
+    name: 'disable_rule',
+    labelFa: 'خاموش کردن قانون خودکار',
+    risk: 'low',
+    description: 'Switch off a standing rule by id (from list_rules).',
+    parameters: { type: 'object', properties: { id: { type: 'string' }, reason: { type: 'string' } }, required: ['id'] },
+    async preview(a) {
+      const r = listRules().find((x) => x.id === a.id);
+      return {
+        titleFa: 'خاموش کردن قانون خودکار',
+        summaryFa: r ? `این قانون دیگر اجرا نمی‌شود: ${r.fa}` : 'قانون پیدا نشد.',
+        changes: [{ label: 'قانون', before: 'فعال', after: 'خاموش' }],
+        impacts: [{ kind: 'reversible', text: 'هر وقت بخواهید می‌شود دوباره ساختش.' }],
+        steps: ['خاموش کردن قانون'],
+        blocked: r ? null : { reasonFa: 'قانونی با این شناسه فعال نیست.' },
+        reasonFa: a.reason,
+      };
+    },
+    async run(a) {
+      const r = disableRule(a.id);
+      return r ? { ok: true, disabled: describeRule(r) } : { ok: false, error: 'قانون پیدا نشد.' };
     },
   },
 ];

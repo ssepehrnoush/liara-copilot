@@ -15,6 +15,7 @@ import { findGrowingCollection } from '../src/analyzer.js';
 import { callCost } from '../src/llm.js';
 import { SYSTEM_PROMPT, contextNote } from '../src/prompts.js';
 import { toolByName } from '../src/tools/index.js';
+import { useRulesFile, addRule, checkRule, dueRules, markFired, listRules } from '../src/rules.js';
 
 const CATALOG = {
   plans: [
@@ -224,4 +225,45 @@ test('code fix: an edit that would not parse is caught before the approval card,
   assert.equal(plannedSyntaxError(dir, fine), null, 'ES module syntax still parses next to its package.json');
   assert.equal(fs.readFileSync(path.join(dir, 'trending.js'), 'utf8'), before);
   assert.deepEqual(fs.readdirSync(dir).filter((f) => f.startsWith('.lc-check')), []);
+});
+
+test('standing rules: only low-impact actions can be automated', () => {
+  useRulesFile(path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'lc-rules-')), 'rules.json'));
+  assert.throws(() => checkRule({ trigger: { type: 'ram_above', value: 85 }, action: 'change_plan' }), /خودکار/);
+  assert.throws(() => checkRule({ trigger: { type: 'every_hours', value: 6 }, action: 'restart' }), /زمان‌بندی/);
+  assert.throws(() => checkRule({ trigger: { type: 'ram_above', value: 20 }, action: 'restart' }), /بین/);
+  assert.throws(() => checkRule({ trigger: { type: 'ram_above', value: 85 }, action: 'restart', maxPerHour: 10 }), /سقف/);
+  assert.doesNotThrow(() => checkRule({ trigger: { type: 'down' }, action: 'investigate' }));
+});
+
+test('standing rules: fire once, respect the hourly budget, say once when it holds back', () => {
+  useRulesFile(path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'lc-rules-')), 'rules.json'));
+  const r = addRule({ app: 'shop', trigger: { type: 'ram_above', value: 80 }, action: 'restart', maxPerHour: 2 });
+  const t0 = Date.parse('2026-10-22T10:00:00Z');
+  const high = { level: 'degraded', mem: { pct: 90 }, probes: [] };
+  const low = { level: 'healthy', mem: { pct: 30 }, probes: [] };
+  assert.equal(dueRules('shop', low, t0).length, 0);
+  assert.equal(dueRules('shop', high, t0)[0].rule.id, r.id);
+  markFired(r, t0);
+  assert.equal(dueRules('shop', high, t0 + 60000).length, 0, 'same incident, too soon');
+  assert.equal(dueRules('shop', low, t0 + 120000).length, 0);
+  const again = dueRules('shop', high, t0 + 180000);
+  assert.equal(again.length, 1, 'condition cleared and came back: fires again within the budget');
+  markFired(r, t0 + 180000);
+  const held = dueRules('shop', high, t0 + 240000);
+  assert.equal(held.length, 1);
+  assert.equal(held[0].limitReached, true);
+  assert.equal(dueRules('shop', high, t0 + 300000).length, 0, 'the hold-back notice comes only once');
+  assert.equal(listRules({ app: 'shop' })[0].fired.length, 2);
+});
+
+test('standing rules: a periodic report fires at once, then every N hours', () => {
+  useRulesFile(path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'lc-rules-')), 'rules.json'));
+  const r = addRule({ app: 'shop', trigger: { type: 'every_hours', value: 6 }, action: 'notify' });
+  const t0 = Date.parse('2026-10-22T10:00:00Z');
+  const snap = { level: 'healthy', mem: { pct: 30 }, probes: [] };
+  assert.equal(dueRules('shop', snap, t0).length, 1);
+  markFired(r, t0);
+  assert.equal(dueRules('shop', snap, t0 + 5 * 3600000).length, 0);
+  assert.equal(dueRules('shop', snap, t0 + 6 * 3600000).length, 1);
 });

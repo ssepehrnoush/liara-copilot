@@ -54,6 +54,12 @@ button { font-family: inherit; font-size: inherit; cursor: pointer; }
 .killbtn { color: var(--bad); border-color: var(--bad); }
 .killbtn.on { background: var(--bad); color: #fff; }
 .card.security { border: 2px solid var(--bad); background: var(--bad-soft); }
+.card.rule { border-inline-start: 4px solid var(--accent); }
+.card.rule .rule-hyps { margin: 4px 0; padding-inline-start: 20px; font-size: 13.5px; }
+.card.rule .actions { margin-top: 6px; }
+.rules { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 14px; display: flex; flex-direction: column; gap: 8px; }
+.rules-h { font-weight: 700; font-size: 14px; }
+.rule-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 13px; border-top: 1px solid var(--line); padding-top: 8px; }
 .card.security pre { font-family: var(--mono); font-size: 12px; white-space: pre-wrap; unicode-bidi: plaintext; text-align: start; background: var(--panel); border-radius: 8px; padding: 6px 8px; margin: 6px 0; }
 .danger { background: var(--bad); color: #fff; border: 0; border-radius: 10px; padding: 8px 18px; }
 

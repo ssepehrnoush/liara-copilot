@@ -12,6 +12,8 @@ import { llmUsage } from './llm.js';
 import { recentAudit, auditBus } from './audit.js';
 import { managedApps, canModify, appInfo } from './scope.js';
 import { startWatcher, healthSnapshot } from './watcher.js';
+import { listRules, disableRule, describeRule } from './rules.js';
+import { makeRuleRunner } from './ruleRunner.js';
 
 const MB = 1024 * 1024;
 const liara = config.liaraMode === 'sim'
@@ -95,6 +97,15 @@ app.post('/api/session/:id/reset', (req, res) => {
   res.json({ ok: true });
 });
 
+// ---- standing rules: switching one off is always allowed (it only removes automation) ----
+app.post('/api/rules/:id/disable', (req, res) => {
+  const r = disableRule(req.params.id);
+  if (!r) return res.status(404).json({ error: 'not found' });
+  audit({ actor: 'user', kind: 'rule_disabled', tool: 'rules', risk: 'auto', app: r.app, summary: `قانون خودکار خاموش شد: ${describeRule(r)}`, status: 'ok' });
+  statusCache.at = 0;
+  res.json({ ok: true });
+});
+
 // ---- status panel ----
 let statusCache = { at: 0, data: null };
 async function buildStatus() {
@@ -126,6 +137,7 @@ async function buildStatus() {
     balanceError: billing.error || null,
     appsError: apps.error || null,
     apps: detailed.sort((x, y) => Number(y.managed) - Number(x.managed)),
+    rules: listRules().map((r) => ({ id: r.id, app: r.app, fa: r.fa, action: r.action, firedLastHour: r.firedLastHour, maxPerHour: r.maxPerHour, lastFiredAt: r.fired.at(-1) || null })),
     at: Date.now(),
   };
 }
@@ -166,7 +178,7 @@ auditBus.on('entry', (rec) => broadcast('audit', { entry: rec }));
 app.use(express.static(path.join(config.root, 'web'), { extensions: ['html'] }));
 app.use('/assets', express.static(path.join(config.root, 'assets')));
 
-startWatcher(liara, (alert) => broadcast('alert', { alert }));
+startWatcher(liara, (alert) => broadcast('alert', { alert }), makeRuleRunner(liara, (type, data) => { statusCache.at = 0; broadcast(type, data); }));
 
 const server = app.listen(config.port, () => {
   const c = publicConfig();
