@@ -6,12 +6,13 @@
 
 <p align="center"><img src="assets/demo.svg" alt="Animated terminal demo: HTTP 500 on checkout, diagnosis from logs, approval card, fix on Liara, verified" width="780"></p>
 
-A captured run (simulator backend; captured earlier with gpt-5.4, the copilot now answers through BoxAPI with OpenAI as fallback): the checkout page returns HTTP 500. The copilot reads the logs and ranks a missing `PAYMENT_API_KEY` first (93%), because the error starts right after the last release. It then shows an approval card with a password field, sets the variable on Liara and probes again: success goes from 67% to 100%.
+A captured run (simulator backend, recorded with an earlier model; the copilot now answers with gpt-6-sol through BoxAPI, OpenAI as fallback): the checkout page returns HTTP 500. The copilot reads the logs and ranks a missing `PAYMENT_API_KEY` first (93%), because the error starts right after the last release. It then shows an approval card with a password field, sets the variable on Liara and probes again: success goes from 67% to 100%.
 
 - **Deploy:** analyses a folder or GitHub repo, proposes the cheapest plan that fits with its monthly price, creates the app, uploads, follows the build and health-checks the URL.
 - **SRE:** reads logs, events and CPU/RAM trends against plan limits, plus live probes. It ranks causes with evidence, applies the smallest safe fix, then verifies before and after.
 - **Code fixes:** when the cause is in the code (a memory leak, a bug behind the errors), it finds the file and line, shows the exact edit as a red/green diff, and only if the user approves patches the code, ships a new release and verifies it. If the user says no, it writes a precise task for their coding agent instead.
 - **Safety:** read-only tools run on their own; every change goes through an approval card enforced in code. There are no delete tools, prompt injection in logs is detected, and a kill switch is one click away. See [SECURITY.md](SECURITY.md).
+- **Cost and model choice:** the model cost of every turn is shown in the header and written to the audit log. The four demo tasks were measured with six execution paths, from the current model to open-weight ones and a no-model rule mode. The results are on the in-app page "مسیرهای اجرا" (`/paths.html`), along with a monthly cost calculator for Liara and an estimate for self-hosting.
 
 | Incident: memory leak found in code, handed to the coding agent, verified | Prompt injection hidden in a visitor review, flagged and ignored |
 |---|---|
@@ -168,7 +169,7 @@ npm run sim            # همان رابط با شبیه‌ساز محلی (بد
 پوشهٔ `demo/` یک کتاب‌فروشی کوچک بدون وابستگی دارد:
 - `demo/shop-v1`: نسخهٔ سالم.
 - `demo/shop-v2`: صفحهٔ پرداخت اضافه شده که متغیر `PAYMENT_API_KEY` را لازم دارد (بدون آن خطای ۵۰۰) و بخش «پرطرفدارها» که هر بازدید را در حافظه نگه می‌دارد (نشت حافظه و کندی زیر بار).
-- `demo/shop-v3`: همان اصلاحی که کوپایلت برای ایجنت کدنویس نوشت (شمارنده به‌جای نگه داشتن همهٔ بازدیدها)؛ رم صاف می‌ماند.
+- `demo/shop-v3`: نسخهٔ اصلاح‌شدهٔ آماده (شمارنده به‌جای نگه داشتن همهٔ بازدیدها)، برای وقتی که کاربر اصلاح خودکار را رد کند و ایجنت کدنویس کد را درست کند؛ رم صاف می‌ماند.
 - `demo/send-review.js`: یک «نظر» مخرب می‌فرستد که در لاگ اپ می‌نشیند و سعی می‌کند به ایجنت دستور حذف بدهد (برای نمایش تشخیص تزریق دستور).
 - `demo/loadgen.js`: بازدیدکنندهٔ ساختگی: `node demo/loadgen.js https://APP.liara.run 8 6` (۸ درخواست در ثانیه به مدت ۶ دقیقه).
 
@@ -176,7 +177,8 @@ npm run sim            # همان رابط با شبیه‌ساز محلی (بد
 ۱. «پروژه‌ام توی پوشهٔ demo/shop-v1 هست. می‌خوام روی لیارا بالا بیاد.»  ← تحلیل، پیشنهاد پلن، تأیید، دیپلوی، آدرس زنده
 ۲. «نسخهٔ جدید توی demo/shop-v2 آماده‌ست. منتشرش کن.»                   ← انتشار نسخه
 ۳. «صفحهٔ پرداخت (/checkout) خطای ۵۰۰ می‌ده.»                            ← متغیر گمشده با ۹۳٪، ثبت امن کلید، بررسی قبل و بعد
-۴. اجرای loadgen، هشدار ناظر «رم نزدیک سقف / کندی»                       ← نشت حافظه با شیب رشد، پیدا کردن خط مقصر، دستور کار برای ایجنت کدنویس، ری‌استارت موقت، بررسی
+۴. اجرای loadgen، هشدار ناظر «رم نزدیک سقف / کندی»                       ← نشت حافظه با شیب رشد، پیدا کردن خط مقصر، اصلاح کد با نمایش قرمز و سبز، تأیید، انتشار و بررسی خودکار قبل و بعد
+   (اگر کاربر اصلاح را رد کند: دستور کار برای ایجنت کدنویس و ری‌استارت موقت)
 ```
 
 ## ساختار پوشه‌ها
