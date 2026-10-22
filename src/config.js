@@ -73,6 +73,11 @@ export const config = {
       .map((k) => ({ name: k, ...providers[k], model: k === provider ? providers[k].model : (process.env[`${k.toUpperCase()}_MODEL`] || providers[k].model) })),
     active: null,
     lastFallback: null,
+    // USD per million tokens, for providers that do not report the cost of a call themselves
+    // (BoxAPI does, in usage.cost). OpenAI list price for gpt-6-sol, October 2026.
+    prices: { 'gpt-6-sol': { input: 2, cachedInput: 0.2, output: 10 } },
+    // Free-market dollar rate for showing the cost in toman (late October 2026).
+    usdToman: Number(process.env.USD_TOMAN || 270000),
   },
   // Optional passcode for when the copilot itself is hosted publicly.
   passcode: process.env.COPILOT_PASSCODE || '',

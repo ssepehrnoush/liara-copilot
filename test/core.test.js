@@ -11,6 +11,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { planEdits, applyPlan, restore, syntaxError } from '../src/codefix.js';
+import { findGrowingCollection } from '../src/analyzer.js';
+import { callCost } from '../src/llm.js';
+import { SYSTEM_PROMPT, contextNote } from '../src/prompts.js';
+import { toolByName } from '../src/tools/index.js';
 
 const CATALOG = {
   plans: [
@@ -162,4 +166,51 @@ test('code fix: a syntax error is caught before anything is published', () => {
   const plan = planEdits(dir, [{ file: 'trending.js', find: 'export function historySize() {', replace: 'export function historySize() {{' }]);
   applyPlan(dir, plan, path.join(dir, '..', `${path.basename(dir)}-bak`));
   assert.equal(syntaxError(dir, plan.files)?.file, 'trending.js');
+});
+
+test('cache: the instructions never change; live state and time go in a separate note', () => {
+  assert.ok(!/Current time|Apps managed/.test(SYSTEM_PROMPT));
+  const at = Date.parse('2026-10-22T10:00:00.123Z');
+  const note = (now) => contextNote({ mode: 'sim', managed: ['shop'], currentApp: 'shop', project: null, knownPages: 'shop: /', now });
+  assert.equal(note(at), note(at));
+  assert.ok(note(at).includes('2026-10-22T10:00:00Z'));
+});
+
+test('cost: cached prompt tokens use the cached price, a cost reported by the provider wins', () => {
+  const usage = { prompt_tokens: 10000, prompt_tokens_details: { cached_tokens: 8000 }, completion_tokens: 1000 };
+  assert.ok(Math.abs(callCost('gpt-6-sol', usage) - 0.0156) < 1e-9);
+  assert.ok(Math.abs(callCost('openai/gpt-6-sol', usage) - 0.0156) < 1e-9);
+  assert.equal(callCost('openai/gpt-6-sol', { ...usage, cost: 0.5 }), 0.5);
+  assert.equal(callCost('some-unpriced-model', usage), null);
+});
+
+test('leak finder: points at the collection that only grows in the demo shop', () => {
+  const leak = findGrowingCollection(shopCopy());
+  assert.equal(leak.name, 'viewHistory');
+  assert.equal(`${leak.declared.file}:${leak.declared.line}`, 'trending.js:5');
+  assert.equal(`${leak.grows.file}:${leak.grows.line}`, 'trending.js:8');
+});
+
+test('model view: a slim diagnosis keeps causes, key numbers and security notices', () => {
+  const full = {
+    incidentId: 'inc-1',
+    hypotheses: [{ id: 'memory_leak', confidence: 90, evidence: ['RAM grows'] }],
+    securityNotice: { promptInjectionAttempts: ['x'] },
+    evidence: {
+      probe: { total: 3, ok: 3, p50ms: 5, worstMs: 9, at: 'now', url: 'http://x', paths: [{ path: '/', samples: 3, ok: 3, codes: { 200: 3 }, p50ms: 5, maxMs: 9, clientErrors: 0 }] },
+      cpu: { avgPctOfPlan: 10, maxPctOfPlan: 20, points: 30 },
+      events: { total: 2, oom: [], restarts: [], recent: [{ text: 'started' }] },
+      applets: [{ id: 'a1', state: 'running' }],
+      logs: { errors: 4, topErrors: [1, 2, 3, 4].map((n) => ({ count: n, sample: 'boom', stack: ['a', 'b', 'c'] })) },
+    },
+  };
+  const slim = toolByName.investigate_incident.forModel(full);
+  assert.deepEqual(slim.hypotheses, full.hypotheses);
+  assert.deepEqual(slim.securityNotice, full.securityNotice);
+  assert.equal(slim.evidence.applets, undefined);
+  assert.equal(slim.evidence.events.recent, undefined);
+  assert.equal(slim.evidence.cpu.points, undefined);
+  assert.equal(slim.evidence.logs.topErrors.length, 3);
+  assert.equal(slim.evidence.logs.topErrors[0].stack.length, 2);
+  assert.equal(toolByName.verify_recovery.forModel({ verdict: 'recovered', probe: { paths: [] } }).probe, undefined);
 });

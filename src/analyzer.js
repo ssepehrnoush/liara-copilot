@@ -257,6 +257,25 @@ export function searchCode(dir, pattern, maxHits = 30) {
   return hits;
 }
 
+// The usual shape of a memory leak: a module-level collection that something keeps adding to
+// and nothing empties. Used by rule mode (through the visible code-search tool) and by
+// investigate_incident.
+export const COLLECTION_DECL = '^(const|let|var)\\s+\\w+\\s*=\\s*(\\[\\]|new Map\\(\\)|\\{\\})\\s*;';
+export const COLLECTION_GROW = '\\.(push|set)\\(';
+
+export function matchGrowingCollection(declHits = [], growHits = []) {
+  for (const arr of declHits) {
+    const name = arr.text.match(/(?:const|let|var)\s+(\w+)/)?.[1];
+    const grow = growHits.find((p) => p.file === arr.file && p.text.includes(`${name}.`));
+    if (name && grow) return { name, declared: arr, grows: grow };
+  }
+  return null;
+}
+
+export function findGrowingCollection(dir) {
+  return matchGrowingCollection(searchCode(dir, COLLECTION_DECL), searchCode(dir, COLLECTION_GROW));
+}
+
 export function readFileSafe(dir, rel, fromLine = 1, toLine = 120) {
   const abs = path.resolve(dir, rel);
   if (!abs.startsWith(path.resolve(dir))) throw new Error('مسیر خارج از پوشهٔ پروژه است.');

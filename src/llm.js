@@ -46,16 +46,28 @@ function unavailable(msg) {
 // Running totals since start, per provider (BoxAPI reports the cost of each call in usage).
 export const llmUsage = {};
 
+// Cost of one call in USD: BoxAPI's own figure when given, else the list price (cached
+// prompt tokens are billed at the cached rate). null when the model has no known price.
+export function callCost(model, usage) {
+  if (!usage) return null;
+  if (typeof usage.cost === 'number') return usage.cost;
+  const price = config.llm.prices[String(model).split('/').pop()];
+  if (!price) return null;
+  const cached = usage.prompt_tokens_details?.cached_tokens || 0;
+  return (((usage.prompt_tokens || 0) - cached) * price.input + cached * price.cachedInput + (usage.completion_tokens || 0) * price.output) / 1e6;
+}
+
 // Try each configured provider in order (BoxAPI, then any LLM_FALLBACK provider).
 // A provider that is out of budget, blocked or misconfigured is skipped for this call.
-export async function chat({ messages, tools, onDelta, maxTokens = 2000 }) {
+// cacheKey groups calls that share a prefix (one conversation) for OpenAI's prompt cache.
+export async function chat({ messages, tools, onDelta, maxTokens = 2000, cacheKey }) {
   const chain = config.llm.chain;
   if (!chain.length) throw unavailable('no LLM provider configured');
   let lastErr;
   const failed = [];
   for (const [i, p] of chain.entries()) {
     try {
-      const out = await withGate(p, async () => readStream(await open(p, { messages, tools, maxTokens, last: i === chain.length - 1 }), onDelta));
+      const out = await withGate(p, async () => readStream(await open(p, { messages, tools, maxTokens, cacheKey, last: i === chain.length - 1 }), onDelta));
       if (failed.length) {
         config.llm.lastFallback = { at: Date.now(), to: p.name, model: p.model, failed, budget: failed.some((f) => /402|budget|spending limit/i.test(f.reason)) };
         console.warn(`[llm] ${failed.map((f) => `${f.name} failed (${f.reason.slice(0, 90)})`).join('; ')} -> answered by ${p.name}:${p.model}`);
@@ -66,7 +78,8 @@ export async function chat({ messages, tools, onDelta, maxTokens = 2000 }) {
       u.promptTokens += out.usage?.prompt_tokens || 0;
       u.cachedTokens += out.usage?.prompt_tokens_details?.cached_tokens || 0;
       u.completionTokens += out.usage?.completion_tokens || 0;
-      u.costUSD += out.usage?.cost || 0;
+      out.costUSD = callCost(p.model, out.usage);
+      u.costUSD += out.costUSD || 0;
       return out;
     } catch (e) {
       lastErr = e;
@@ -77,10 +90,11 @@ export async function chat({ messages, tools, onDelta, maxTokens = 2000 }) {
   throw lastErr;
 }
 
-async function open(p, { messages, tools, maxTokens, last = true }) {
+async function open(p, { messages, tools, maxTokens, cacheKey, last = true }) {
   const body = { model: p.model, messages, stream: true };
   // OpenAI sends token usage on a stream only when asked; BoxAPI always does.
   if (p.name === 'openai') body.stream_options = { include_usage: true };
+  if (p.name === 'openai' && cacheKey) body.prompt_cache_key = cacheKey;
   // Newer reasoning-era models reject some sampling params; send only what each family accepts.
   const reasoning = /gpt-([5-9]|\d\d)|(^|\/)o\d|~openai\/gpt-/.test(p.model);
   if (reasoning) body.max_completion_tokens = maxTokens;

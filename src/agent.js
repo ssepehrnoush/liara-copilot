@@ -2,7 +2,7 @@
 // Read-only tools run at once; every other tool first shows an approval card and waits.
 import { randomUUID } from 'node:crypto';
 import { chat } from './llm.js';
-import { systemPrompt } from './prompts.js';
+import { SYSTEM_PROMPT, contextNote } from './prompts.js';
 import { toolByName, toolSchemas, RISK_FA } from './tools/index.js';
 import { audit } from './audit.js';
 import { scrubDeep } from './redact.js';
@@ -73,11 +73,16 @@ function clip(obj, max) {
 
 function buildMessages(session) {
   const knownPages = managedApps().map((a) => `${a}: ${(appInfo(a)?.watchPaths || ['/']).join(' ')}`).join('; ');
-  const sys = { role: 'system', content: systemPrompt({ mode: config.liaraMode, managed: managedApps(), currentApp: session.currentApp, project: session.project, knownPages }) };
+  const note = { role: 'system', content: contextNote({ mode: config.liaraMode, managed: managedApps(), currentApp: session.currentApp, project: session.project, knownPages, now: session.turnStartedAt }) };
   // Keep the last turns in full, shorten older tool outputs to save context.
   const msgs = session.messages.slice(-60);
   const lastUser = msgs.map((m) => m.role).lastIndexOf('user');
-  return [sys, ...msgs.map((m, i) => (m.role === 'tool' && i < lastUser ? { ...m, content: clip(m.content, 1500) } : m))];
+  const at = lastUser < 0 ? msgs.length : lastUser;
+  const shown = msgs.map((m, i) => (m.role === 'tool' && i < lastUser ? { ...m, content: clip(m.content, 1500) } : m));
+  // Fixed instructions first and the live context just before the newest user message: every
+  // call of a turn then starts with the same bytes as the call before it, which the provider
+  // bills at the cached rate.
+  return [{ role: 'system', content: SYSTEM_PROMPT }, ...shown.slice(0, at), note, ...shown.slice(at)];
 }
 
 async function runTool(session, call, ctx) {
@@ -231,15 +236,62 @@ function repairHistory(session) {
   }
 }
 
+// Fixes that should be checked right after the user approves them, when an incident is open.
+const AUTO_VERIFY = new Set(['set_env_vars', 'fix_code', 'restart_app', 'rollback_release', 'change_plan', 'start_app']);
+
+// The check runs in the same step as the fix, so the model does not need another full-context
+// call just to ask for it. It shows up in the UI as its own row and before/after card.
+async function autoVerify(session, call, result, ctx) {
+  if (!AUTO_VERIFY.has(call.function.name) || !result?.approvedByUser || result.ok === false || result.error) return null;
+  let app;
+  try { app = JSON.parse(call.function.arguments || '{}').app; } catch { return null; }
+  const inc = session.lastIncident;
+  if (!app || inc?.app !== app) return null;
+  await new Promise((r) => setTimeout(r, 2000));
+  return runTool(session, { id: `verify_${randomUUID().slice(0, 8)}`, function: { name: 'verify_recovery', arguments: JSON.stringify({ app, incidentId: inc.id }) } }, ctx);
+}
+
+// What the model reads: a tool may drop fields that only the UI cards need.
+function modelView(name, result) {
+  if (!result || result.error) return result;
+  const view = toolByName[name]?.forModel;
+  const slim = view ? view(result) : result;
+  return result.verification ? { ...slim, verification: modelView('verify_recovery', result.verification) } : slim;
+}
+
+const fa = (n) => Math.round(n).toLocaleString('fa-IR');
+const emptyUsage = () => ({ calls: 0, promptTokens: 0, cachedTokens: 0, completionTokens: 0, costUSD: 0, unpriced: 0 });
+
+function addUsage(total, out) {
+  total.calls++;
+  total.promptTokens += out.usage?.prompt_tokens || 0;
+  total.cachedTokens += out.usage?.prompt_tokens_details?.cached_tokens || 0;
+  total.completionTokens += out.usage?.completion_tokens || 0;
+  if (out.costUSD === null || out.costUSD === undefined) total.unpriced++;
+  else total.costUSD += out.costUSD;
+}
+
+// One audit row per turn with what the model cost, and a running total for the header chip.
+function recordUsage(session, turn) {
+  if (!turn.calls) return;
+  const tomanNow = turn.costUSD * config.llm.usdToman;
+  audit({ actor: 'agent', kind: 'llm_usage', tool: 'llm', risk: 'auto', status: 'ok', usage: { ...turn, toman: Math.round(tomanNow) },
+    summary: `هزینهٔ مدل در این نوبت: حدود ${fa(tomanNow)} تومان (${fa(turn.calls)} فراخوانی، ${fa(turn.promptTokens)} توکن ورودی که ${fa(turn.cachedTokens)} از کش بود)` });
+  emit(session, 'usage', { turn, session: session.usage, usdToman: config.llm.usdToman });
+}
+
 export async function runTurn(session, userText, liara) {
   if (session.busy) {
     emit(session, 'error', { message: 'هنوز درخواست قبلی در حال انجام است.' });
     return;
   }
   session.busy = true;
+  session.turnStartedAt = Date.now();
   session.messages.push({ role: 'user', content: userText });
   emit(session, 'user', { text: userText });
   const ctx = { liara, session };
+  const turnUsage = emptyUsage();
+  session.usage ||= emptyUsage();
   try {
     if (llmState.downUntil > Date.now() || !config.llm.chain.length) {
       await fallbackTurn(session, userText, ctx);
@@ -259,11 +311,15 @@ export async function runTurn(session, userText, liara) {
       emit(session, 'assistant_start', { msgId });
       let message;
       try {
-        ({ message } = await chat({
+        const out = await chat({
           messages: buildMessages(session),
           tools: toolSchemas(),
           onDelta: (d) => emit(session, 'delta', { msgId, text: d }),
-        }));
+          cacheKey: `liara-copilot-${session.id}`,
+        });
+        message = out.message;
+        addUsage(turnUsage, out);
+        addUsage(session.usage, out);
       } catch (e) {
         emit(session, 'assistant_end', { msgId });
         if (!e.unavailable) throw e;
@@ -286,9 +342,11 @@ export async function runTurn(session, userText, liara) {
       session.messages.push(message);
       if (!message.tool_calls?.length) break;
       for (const call of message.tool_calls) {
-        const result = await runTool(session, call, ctx);
+        let result = await runTool(session, call, ctx);
         if (/^unknown tool|not valid JSON/.test(result?.error || '')) broken++;
-        session.messages.push({ role: 'tool', tool_call_id: call.id, content: clip(scrubDeep(result), 14000) });
+        const verification = await autoVerify(session, call, result, ctx);
+        if (verification) result = { ...result, verification };
+        session.messages.push({ role: 'tool', tool_call_id: call.id, content: clip(scrubDeep(modelView(call.function.name, result)), 14000) });
       }
       if (broken >= 2) {
         await toRuleMode('فراخوانی ابزار نامعتبر');
@@ -299,6 +357,7 @@ export async function runTurn(session, userText, liara) {
     emit(session, 'error', { message: `خطا در ارتباط با مدل: ${e.message.slice(0, 200)}` });
     repairHistory(session);
   } finally {
+    recordUsage(session, turnUsage);
     session.busy = false;
     emit(session, 'turn_end', {});
   }

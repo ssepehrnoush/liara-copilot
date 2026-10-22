@@ -4,7 +4,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { config } from '../config.js';
-import { analyzeProject, recommendPlan, searchCode, readFileSafe, fetchGithub } from '../analyzer.js';
+import { analyzeProject, recommendPlan, searchCode, readFileSafe, fetchGithub, findGrowingCollection } from '../analyzer.js';
 import { deployRelease } from '../deployer.js';
 import { httpCheck } from '../probe.js';
 import { collectEvidence, verifyRecovery } from '../diagnose.js';
@@ -79,6 +79,24 @@ function recordDeploy(app, releaseID, dir) {
 function savedSource(app, releaseID) {
   const d = (appInfo(app)?.deploys || []).find((x) => x.releaseID === releaseID);
   return d && fs.existsSync(d.dir) ? d.dir : null;
+}
+
+const LEAK_IDS = new Set(['memory_leak', 'memory_pressure', 'data_growth']);
+
+// For a leak-shaped incident the copilot looks for the growing collection itself and hands
+// the model the numbered source, so a fix can be proposed without separate search and read
+// calls (each of those is one more round trip carrying the whole conversation).
+function codeSuspect(app, session) {
+  const dir = projectDir(app) || session.project?.dir;
+  if (!dir) return null;
+  try {
+    const leak = findGrowingCollection(dir);
+    if (!leak) return null;
+    const from = Math.max(1, leak.grows.line - 60);
+    return { collection: leak.name, declaredAt: `${leak.declared.file}:${leak.declared.line}`, growsAt: `${leak.grows.file}:${leak.grows.line}`, source: readFileSafe(dir, leak.grows.file, from, from + 119) };
+  } catch {
+    return null;
+  }
 }
 
 function watchPathsFrom(routes = []) {
@@ -251,14 +269,35 @@ export const tools = [
     labelFa: 'عیب‌یابی خودکار',
     risk: 'auto',
     ui: 'diagnosis',
-    description: 'SRE investigation. Gathers in parallel: app status, releases, containers, runtime logs (error signatures, missing env vars, dependency errors), events (OOM, restarts), CPU/RAM trends vs plan limits, and live HTTP probes. Returns ranked hypotheses with evidence and a suggested fix each. Call this FIRST when the user reports slowness, errors, HTTP 500 or downtime.',
+    description: 'SRE investigation. Gathers in parallel: app status, releases, containers, runtime logs (error signatures, missing env vars, dependency errors), events (OOM, restarts), CPU/RAM trends vs plan limits, and live HTTP probes. Returns ranked hypotheses with evidence and a suggested fix each, plus codeSuspect (the numbered source around a collection that keeps growing) when memory points to a leak. Call this FIRST when the user reports slowness, errors, HTTP 500 or downtime.',
     parameters: { type: 'object', properties: { app: { type: 'string' }, symptom: { type: 'string', description: 'User words, e.g. "site is slow" or "500 on checkout"' }, paths: { type: 'array', items: { type: 'string' }, description: 'Pages to probe, include any path the user mentioned' }, minutes: { type: 'number' } }, required: ['app'] },
     async run({ app, symptom, paths, minutes = 30 }, { liara, session }) {
       // Probe the pages the user named plus the pages the watcher already follows for this app.
       const p = [...new Set(['/', ...(paths || []), ...(appInfo(app)?.watchPaths || [])])].slice(0, 5);
       const r = await collectEvidence(liara, app, { minutes, paths: p, lastFixAt: appInfo(app)?.lastFixAt || session.lastFixAt || null });
       session.lastIncident = { id: r.incidentId, app, symptom };
-      return { symptom: symptom || null, incidentId: r.incidentId, hypotheses: r.hypotheses, evidence: r.evidence };
+      const suspect = r.hypotheses.slice(0, 3).some((h) => LEAK_IDS.has(h.id)) ? codeSuspect(app, session) : null;
+      return { symptom: symptom || null, incidentId: r.incidentId, hypotheses: r.hypotheses, evidence: r.evidence, ...(suspect ? { codeSuspect: suspect } : {}) };
+    },
+    // The diagnosis card shows everything; the model needs the ranked causes and the key numbers.
+    forModel({ evidence: ev = {}, ...rest }) {
+      const probe = ev.probe?.paths ? { total: ev.probe.total, ok: ev.probe.ok, p50ms: ev.probe.p50ms, worstMs: ev.probe.worstMs, paths: ev.probe.paths.map(({ path: p, samples, ok, codes, p50ms, sampleError }) => ({ path: p, samples, ok, codes, p50ms, sampleError })) } : ev.probe;
+      const logs = ev.logs && !ev.logs.error ? { ...ev.logs, topErrors: (ev.logs.topErrors || []).slice(0, 3).map((g) => ({ ...g, stack: (g.stack || []).slice(0, 2) })) } : ev.logs;
+      return {
+        ...rest,
+        evidence: {
+          app: ev.app,
+          limits: ev.limits,
+          probe,
+          releases: (ev.releases || []).slice(0, 3).map(({ id, tag, state, createdAt, sourceAvailable }) => ({ id, tag, state, createdAt, sourceAvailable })),
+          logs,
+          memory: ev.memory,
+          cpu: ev.cpu && !ev.cpu.error ? { avgPctOfPlan: ev.cpu.avgPctOfPlan, maxPctOfPlan: ev.cpu.maxPctOfPlan } : ev.cpu,
+          events: ev.events && { total: ev.events.total, oom: ev.events.oom, restarts: ev.events.restarts },
+          containerStartedAt: ev.containerStartedAt,
+          unavailable: ev.unavailable,
+        },
+      };
     },
   },
   {
@@ -266,7 +305,9 @@ export const tools = [
     labelFa: 'بررسی نتیجهٔ اصلاح',
     risk: 'auto',
     ui: 'verify',
-    description: 'After a fix, re-probe the site, read logs since the fix and compare with the incident baseline. Always call this after any corrective action and report before/after numbers.',
+    description: 'After a fix, re-probe the site, read logs since the fix and compare with the incident baseline. Approved fixes run this check by themselves while an incident is open (their result has "verification"); call it directly only when that is missing or the user asks to check again.',
+    // The card draws the raw probe; the model only needs the verdict and the before/after numbers.
+    forModel: ({ probe, ...rest }) => rest,
     parameters: { type: 'object', properties: { app: { type: 'string' }, incidentId: { type: 'string' } }, required: ['app'] },
     async run({ app, incidentId }, { liara, session }) {
       return verifyRecovery(liara, app, incidentId || session.lastIncident?.id, { sinceMs: session.lastFixAt });

@@ -164,10 +164,20 @@
           h('div', {}, `در ${ev.app ? `لاگ‌ها یا فایل‌های ${ev.app}` : 'متن خوانده‌شده'} متنی هست که سعی می‌کند به هوش مصنوعی دستور بدهد. کوپایلت این متن را فقط داده حساب کرد؛ هیچ ابزاری به خاطر آن اجرا نمی‌شود و هر تغییری همچنان کارت تأیید شما را لازم دارد.`),
           h('pre', {}, ev.samples.join('\n'))));
         break;
+      case 'usage': {
+        // Running model cost of this conversation (the audit tab has one row per turn).
+        const u = ev.session;
+        const c = $('#costChip');
+        c.textContent = `هزینهٔ این گفتگو: حدود ${toman(u.costUSD * ev.usdToman)}`;
+        c.title = `${faNum(u.calls)} فراخوانی مدل، ${faNum(u.promptTokens)} توکن ورودی (${faNum(u.cachedTokens)} از کش) و ${faNum(u.completionTokens)} توکن خروجی، معادل ${faNum(u.costUSD, 3)} دلار`;
+        c.classList.remove('hidden');
+        break;
+      }
       case 'reset':
         messages.innerHTML = '';
         messages.append(welcomeClone);
         welcomeClone.classList.remove('hidden');
+        $('#costChip').classList.add('hidden');
         break;
       default:
         break;
@@ -501,7 +511,7 @@
     if (r?.killSwitch) setKill(r.killSwitch);
   });
 
-  const KIND_FA = { security_alert: ['امنیتی', 'error'], kill_switch_on: ['توقف اضطراری', 'error'], kill_switch_off: ['فعال‌سازی دوباره', 'ok'], auto: ['خودکار', 'auto'], approved: ['تأییدشده', 'approved'], rejected: ['رد شد', 'rejected'], approval_requested: ['درخواست تأیید', 'medium'], alert: ['هشدار', 'alert'], refused: ['خارج از محدوده', 'error'] };
+  const KIND_FA = { security_alert: ['امنیتی', 'error'], kill_switch_on: ['توقف اضطراری', 'error'], kill_switch_off: ['فعال‌سازی دوباره', 'ok'], auto: ['خودکار', 'auto'], approved: ['تأییدشده', 'approved'], rejected: ['رد شد', 'rejected'], approval_requested: ['درخواست تأیید', 'medium'], alert: ['هشدار', 'alert'], refused: ['خارج از محدوده', 'error'], llm_usage: ['هزینهٔ مدل', 'auto'] };
   const ACTOR = { agent: '🤖', user: '👤', watcher: '👁️' };
   function auditRow(e) {
     const [k, cls] = KIND_FA[e.kind] || [e.kind, ''];

@@ -90,6 +90,7 @@ app.post('/api/session/:id/reset', (req, res) => {
   s.messages = [];
   s.buffer = [];
   s.project = null;
+  s.usage = null;
   emit(s, 'reset', {});
   res.json({ ok: true });
 });

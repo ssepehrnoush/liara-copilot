@@ -3,6 +3,7 @@
 // flows (first deploy, new version, incident -> fix -> verify, status) keep working.
 import { managedApps, appInfo } from './scope.js';
 import { isSecretKey } from './redact.js';
+import { COLLECTION_DECL, COLLECTION_GROW, matchGrowingCollection } from './analyzer.js';
 
 const fa = (n, d = 0) => (n === null || n === undefined ? '-' : Number(n).toLocaleString('fa-IR', { maximumFractionDigits: d }));
 const toman = (n) => `${fa(Math.round(n || 0))} تومان`;
@@ -111,15 +112,9 @@ async function verify(session, app, { runToolByName, say }) {
 }
 
 async function findLeak(app, { runToolByName }) {
-  const arrays = await runToolByName('search_project_code', { app, pattern: '^(const|let|var)\\s+\\w+\\s*=\\s*(\\[\\]|new Map\\(\\)|\\{\\})\\s*;' });
-  const pushes = await runToolByName('search_project_code', { app, pattern: '\\.(push|set)\\(' });
-  if (!arrays.hits?.length || !pushes.hits?.length) return null;
-  for (const arr of arrays.hits) {
-    const name = arr.text.match(/(?:const|let|var)\s+(\w+)/)?.[1];
-    const grow = pushes.hits.find((p) => p.file === arr.file && p.text.includes(`${name}.`));
-    if (name && grow) return { name, declared: arr, grows: grow };
-  }
-  return null;
+  const arrays = await runToolByName('search_project_code', { app, pattern: COLLECTION_DECL });
+  const pushes = await runToolByName('search_project_code', { app, pattern: COLLECTION_GROW });
+  return matchGrowingCollection(arrays.hits, pushes.hits);
 }
 
 // Without a model the copilot can still make one safe, generic fix: cap the growing
