@@ -188,6 +188,32 @@
   }
 
   // ------------------------------------------------------------ activity rows
+  // Read-only steps in a row fold into one quiet line ("۴ بررسی خودکار انجام شد"), opened on a
+  // click; steps that change something (deploy, fix) keep their own row with live progress.
+  let group = null;
+  function groupFor() {
+    if (group && messages.lastElementChild === group.el) return group;
+    const head = h('button', { class: 'group-head', type: 'button' });
+    const list = h('div', { class: 'group-list' });
+    const el = h('div', { class: 'group' }, head, list);
+    head.addEventListener('click', () => el.classList.toggle('open'));
+    add(el);
+    group = { el, head, list, acts: [] };
+    return group;
+  }
+  function paintGroup(g) {
+    const running = g.acts.filter((a) => !a.done);
+    const failed = g.acts.filter((a) => a.done && !a.ok).length;
+    const secs = g.acts.reduce((s, a) => s + (a.ms || 0), 0) / 1000;
+    // replaceChildren() would print a null as the text "null", so leave the optional parts out.
+    g.head.replaceChildren(...[
+      running.length ? h('span', { class: 'spin' }) : h('span', { class: failed ? 'bad-ico' : 'ok-ico' }, failed ? '✗' : '✓'),
+      h('span', {}, running.length ? `در حال ${running.at(-1).label}…` : `${faNum(g.acts.length)} بررسی خودکار انجام شد${failed ? `، ${faNum(failed)} ناموفق` : ''}`),
+      !running.length && secs >= 0.1 ? h('span', { class: 'meta' }, `${faNum(secs, 1)} ثانیه`) : null,
+      h('span', { class: 'chev' }, '⌄'),
+    ].filter(Boolean));
+  }
+
   function actRow(callId, tool, label, kind) {
     let a = acts.get(callId);
     if (a) return a;
@@ -200,8 +226,14 @@
       h('div', { class: 'head', onclick: () => el.classList.toggle('open') }, status, h('span', {}, ICONS[tool] || '🔧'), h('span', { class: 'label' }, label || tool),
         h('span', { class: `badge ${kind}` }, kind === 'auto' ? 'خودکار' : 'با تأیید شما'), meta),
       body);
-    add(el);
-    a = { el, status, meta, steps, body, stepEls: new Map(), log: null, tool };
+    a = { el, status, meta, steps, body, stepEls: new Map(), log: null, tool, label: label || tool };
+    if (kind === 'auto') {
+      a.group = groupFor();
+      a.group.acts.push(a);
+      a.group.list.append(el);
+      paintGroup(a.group);
+      scrollDown();
+    } else add(el);
     acts.set(callId, a);
     return a;
   }
@@ -233,9 +265,12 @@
     const a = actRow(ev.callId, ev.tool, ev.labelFa, 'auto');
     a.status.replaceWith(a.status = ev.ok ? h('span', { class: 'ok-ico' }, '✓') : h('span', { class: 'bad-ico' }, '✗'));
     a.meta.textContent = ev.ms ? `${faNum(ev.ms / 1000, 1)} ثانیه` : '';
+    Object.assign(a, { done: true, ok: ev.ok, ms: ev.ms || 0 });
+    if (a.group) paintGroup(a.group);
     if (ev.error) {
       a.body.append(h('div', { class: 'blocked' }, ev.error));
       a.el.classList.add('open');
+      a.group?.el.classList.add('open');
     }
     if (ev.ui && ev.data) {
       const card = renderToolCard(ev.ui, ev.data);
@@ -432,16 +467,13 @@
     return el;
   };
 
-  // Half-circle gauge: the share of the plan in use, colored by how close it is to the cap.
+  // Ring gauge: the share of the plan in use, colored by how close it is to the cap.
   function gauge(label, pct, sub) {
-    const R = 40;
-    const cx = 52;
-    const cy = 48;
-    const L = Math.PI * R;
-    const arc = `M${cx - R},${cy} A${R},${R} 0 0 1 ${cx + R},${cy}`;
-    const fill = (L * Math.min(1, Math.max(0, pct) / 100)).toFixed(1);
+    const R = 30;
+    const C = 2 * Math.PI * R;
+    const fill = (C * Math.min(1, Math.max(0, pct) / 100)).toFixed(1);
     return h('div', { class: `gauge ${level(pct)}` },
-      svg(104, 54, 'arc', `<path class="track" d="${arc}"/>${pct > 0 ? `<path class="val" d="${arc}" stroke-dasharray="${fill} ${L.toFixed(1)}"/>` : ''}<text x="${cx}" y="${cy - 3}">${faNum(pct)}٪</text>`),
+      svg(80, 80, 'ring', `<circle class="track" cx="40" cy="40" r="${R}"/>${pct > 0 ? `<circle class="val" cx="40" cy="40" r="${R}" stroke-dasharray="${fill} ${C.toFixed(1)}" transform="rotate(-90 40 40)"/>` : ''}<text x="40" y="46">${faNum(pct)}٪</text>`),
       h('div', { class: 'g-label' }, label), h('div', { class: 'g-sub' }, sub));
   }
 
@@ -457,7 +489,7 @@
     const from = to - span;
     const ram = (m?.memory || []).filter((p) => p.t >= from).map((p) => ({ t: p.t, v: (p.mb / a.ramLimitMB) * 100, hi: (p.hiMb / a.ramLimitMB) * 100, mb: p.mb, hiMb: p.hiMb }));
     const cpu = a.cpuLimit ? (m?.cpu || []).filter((p) => p.t >= from).map((p) => ({ t: p.t, v: (p.v / a.cpuLimit) * 100, hi: (p.hi / a.cpuLimit) * 100 })) : [];
-    if (ram.length < 2 && cpu.length < 2) return h('div', { class: 'trend' }, pills, h('div', { class: 'trend-empty' }, 'هنوز داده‌ای در این بازه نیست.'));
+    if (ram.length < 2 && cpu.length < 2) return h('div', { class: 'trend' }, h('div', { class: 'trend-head' }, h('span', {}, 'روند مصرف'), pills), h('div', { class: 'trend-empty' }, 'هنوز داده‌ای در این بازه نیست.'));
     const W = 300;
     const PW = 270;
     const top = 6;
@@ -474,7 +506,18 @@
       pts.forEach((p, i) => { if (!i || p.t - pts[i - 1].t > gap) segs.push([]); segs.at(-1).push(p); });
       return segs;
     };
-    const line = (seg) => seg.map((p, i) => `${i ? 'L' : 'M'}${x(p.t).toFixed(1)},${y(p.v).toFixed(1)}`).join(' ');
+    // A soft curve through the points (Catmull-Rom as cubic Béziers), kept inside the plot.
+    const inPlot = (v) => Math.min(top + PH, Math.max(top, v));
+    const line = (seg) => {
+      const P = seg.map((p) => [x(p.t), y(p.v)]);
+      const f = (n) => n.toFixed(1);
+      let d = `M${f(P[0][0])},${f(P[0][1])}`;
+      for (let i = 0; i < P.length - 1; i++) {
+        const [p0, p1, p2, p3] = [P[i - 1] || P[i], P[i], P[i + 1], P[i + 2] || P[i + 1]];
+        d += ` C${f(p1[0] + (p2[0] - p0[0]) / 6)},${f(inPlot(p1[1] + (p2[1] - p0[1]) / 6))} ${f(p2[0] - (p3[0] - p1[0]) / 6)},${f(inPlot(p2[1] - (p3[1] - p1[1]) / 6))} ${f(p2[0])},${f(p2[1])}`;
+      }
+      return d;
+    };
     const area = (seg) => `${line(seg)} L${x(seg.at(-1).t).toFixed(1)},${y(0)} L${x(seg[0].t).toFixed(1)},${y(0)} Z`;
     const ramSegs = ram.length > 1 ? segments(ram) : [];
     const grid = [0, 50, 100].map((v) => `<line class="grid" x1="0" x2="${PW}" y1="${y(v)}" y2="${y(v)}"/><text class="ylab" x="${PW + 4}" y="${y(v) + 3.5}">${faNum(v)}٪</text>`).join('');
@@ -482,6 +525,7 @@
     const chart = svg(W, 136, 'trend-svg', `${grid}<line class="cap" x1="0" x2="${PW}" y1="${y(100)}" y2="${y(100)}"/>`
       + (ramSegs.length ? `<path class="ram-area" d="${ramSegs.map(area).join(' ')}"/><path class="ram" d="${ramSegs.map(line).join(' ')}"/>` : '')
       + (cpu.length > 1 ? `<path class="cpu" d="${segments(cpu).map(line).join(' ')}"/>` : '')
+      + (ram.length > 1 && to - ram.at(-1).t < span / 10 ? `<circle class="now-dot" cx="${x(ram.at(-1).t).toFixed(1)}" cy="${y(ram.at(-1).v).toFixed(1)}" r="3.6"/>` : '')
       + `<line class="guide" x1="0" x2="0" y1="${top}" y2="${top + PH}" visibility="hidden"/>`
       + `<text class="xlab" x="${PW}" y="132" text-anchor="start">${startLabel}</text><text class="xlab" x="0" y="132" text-anchor="end">الان</text>`
       + `<rect class="hit" x="0" y="0" width="${PW}" height="${top + PH}"/>`);
@@ -500,16 +544,16 @@
       guide.setAttribute('x1', x(at));
       guide.setAttribute('x2', x(at));
       guide.setAttribute('visibility', 'visible');
-      tip.replaceChildren(h('div', { class: 'tt' }, minutes > 30 ? new Date(at).toLocaleString('fa-IR', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' }) : time(at)),
+      tip.replaceChildren(...[h('div', { class: 'tt' }, minutes > 30 ? new Date(at).toLocaleString('fa-IR', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' }) : time(at)),
         r ? h('div', {}, h('i', { class: 'sw ram' }), `رم ${faNum(r.mb)}MB (${faNum(r.v)}٪)`, r.hiMb > r.mb ? h('span', { class: 'pk' }, ` · بیشینه ${faNum(r.hiMb)}MB`) : null) : null,
-        c ? h('div', {}, h('i', { class: 'sw cpu' }), `CPU ${faNum(c.v)}٪`, c.hi > c.v + 1 ? h('span', { class: 'pk' }, ` · بیشینه ${faNum(c.hi)}٪`) : null) : null);
+        c ? h('div', {}, h('i', { class: 'sw cpu' }), `CPU ${faNum(c.v)}٪`, c.hi > c.v + 1 ? h('span', { class: 'pk' }, ` · بیشینه ${faNum(c.hi)}٪`) : null) : null].filter(Boolean));
       tip.classList.remove('hidden');
       const left = (x(at) / W) * box.width;
       tip.style.left = left > box.width / 2 ? 'auto' : `${left + 10}px`;
       tip.style.right = left > box.width / 2 ? `${box.width - left + 10}px` : 'auto';
     });
     chart.addEventListener('mouseleave', () => { tip.classList.add('hidden'); chart.querySelector('.guide').setAttribute('visibility', 'hidden'); });
-    return h('div', { class: 'trend' }, pills, h('div', { class: 'trend-plot' }, chart, tip),
+    return h('div', { class: 'trend' }, h('div', { class: 'trend-head' }, h('span', {}, 'روند مصرف'), pills), h('div', { class: 'trend-plot' }, chart, tip),
       h('div', { class: 'trend-legend' }, h('span', {}, h('i', { class: 'sw ram' }), 'رم'), cpu.length > 1 ? h('span', {}, h('i', { class: 'sw cpu' }), 'CPU') : null, h('span', {}, h('i', { class: 'sw cap' }), 'سقف پلن')));
   }
 
@@ -625,7 +669,7 @@
     killOn = Boolean(ks?.on);
     const b = $('#killBtn');
     b.classList.toggle('on', killOn);
-    b.textContent = killOn ? '▶️ فعال کردن دوباره' : '🛑 توقف اقدامات';
+    b.textContent = killOn ? 'فعال کردن دوباره' : 'توقف اضطراری';
     $('#killBox').classList.toggle('hidden', !killOn);
   }
   $('#killBtn').addEventListener('click', async () => {

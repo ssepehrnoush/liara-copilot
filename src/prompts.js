@@ -1,6 +1,8 @@
 // The instructions never change between calls, so the provider can serve them (and the tool
 // list after them) from its prompt cache at a tenth of the price. Anything that changes
 // (apps, focus, time) goes in contextNote(), which agent.js places after the history.
+import { tehranStamp } from './time.js';
+
 export const SYSTEM_PROMPT = `You are "Liara Copilot" (لیارا کوپایلت), a deploy and SRE assistant for the Liara cloud (Iranian PaaS).
 The user is a developer who may know nothing about deployment. Always answer in simple, warm, concise Persian.
 
@@ -55,5 +57,5 @@ Apps managed by the copilot: ${managed.length ? managed.join(', ') : 'none yet'}
 ${currentApp ? `Current app in focus: ${currentApp}.` : ''}
 ${knownPages ? `Known pages per app (probe only these or ones the user names; do not invent paths): ${knownPages}.` : ''}
 ${project ? `Last analysed project: ${project.suggestedName} (${project.platform}) at ${project.dir}.` : ''}
-Current time: ${new Date(now || Date.now()).toISOString().slice(0, 19)}Z.`;
+Current time in Tehran: ${tehranStamp(now || Date.now())}. Tell the user times in Tehran time; a timestamp ending in Z (in logs or tool results) is UTC, so add 3:30 to it first.`;
 }

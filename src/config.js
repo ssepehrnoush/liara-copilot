@@ -55,6 +55,8 @@ export const config = {
   // Separate state per mode so simulator apps never mix with real ones.
   dataDir: path.join(ROOT, 'data', liaraMode),
   port: Number(process.env.PORT || process.env.COPILOT_PORT || 4100),
+  // Only this computer by default. To serve it to others set HOST=0.0.0.0 and COPILOT_PASSCODE.
+  host: process.env.HOST || '127.0.0.1',
   // "real" talks to api.liara.ir; "sim" runs apps locally behind the same interface.
   liaraMode,
   liara: {

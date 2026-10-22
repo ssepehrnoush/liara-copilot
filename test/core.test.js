@@ -17,6 +17,8 @@ import { SYSTEM_PROMPT, contextNote } from '../src/prompts.js';
 import { toolByName } from '../src/tools/index.js';
 import { useRulesFile, addRule, checkRule, dueRules, markFired, listRules } from '../src/rules.js';
 import { downsample } from '../src/metrics.js';
+import { pathOnApp } from '../src/probe.js';
+import { readFileSafe } from '../src/analyzer.js';
 
 const CATALOG = {
   plans: [
@@ -175,7 +177,8 @@ test('cache: the instructions never change; live state and time go in a separate
   const at = Date.parse('2026-10-22T10:00:00.123Z');
   const note = (now) => contextNote({ mode: 'sim', managed: ['shop'], currentApp: 'shop', project: null, knownPages: 'shop: /', now });
   assert.equal(note(at), note(at));
-  assert.ok(note(at).includes('2026-10-22T10:00:00Z'));
+  // The model gets Tehran time (UTC+3:30), the clock the user sees.
+  assert.ok(note(at).includes('2026-10-22 13:30:00'));
 });
 
 test('cost: cached prompt tokens use the cached price, a cost reported by the provider wins', () => {
@@ -281,4 +284,24 @@ test('usage history: a day of 30 s points shrinks to the chart size and keeps ea
   assert.ok(spike.v > 100 && spike.v < 500, 'while the line shows the bucket average');
   const short = [{ t: t0, v: 1 }, { t: t0 + 15000, v: 3 }];
   assert.deepEqual(downsample(short), [{ t: t0, v: 1, hi: 1 }, { t: t0 + 15000, v: 3, hi: 3 }]);
+});
+
+test('safety: the HTTP probe only hits paths on the app, never another host', () => {
+  const base = 'https://shop.liara.run';
+  assert.equal(pathOnApp(base, '/checkout'), 'https://shop.liara.run/checkout');
+  assert.equal(pathOnApp(base, '/api/products?x=1'), 'https://shop.liara.run/api/products?x=1');
+  for (const bad of ['https://evil.example/?k=secret', '//evil.example/x', 'evil.example', '/\\evil.example', 'http://shop.liara.run.evil.example/', '', null]) {
+    assert.equal(pathOnApp(base, bad), null, `refused: ${bad}`);
+  }
+});
+
+test('safety: secret files are never read, whatever .gitignore says', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lc-read-'));
+  fs.writeFileSync(path.join(dir, 'server.js'), 'console.log(1)\n');
+  for (const f of ['.env.production', 'deploy.pem', 'id_ed25519', 'server.key', 'credentials.json']) fs.writeFileSync(path.join(dir, f), 'SECRET');
+  assert.match(readFileSafe(dir, 'server.js').text, /console/);
+  for (const f of ['.env.production', 'deploy.pem', 'id_ed25519', 'server.key', 'credentials.json']) {
+    assert.throws(() => readFileSafe(dir, f), /رمز|نادیده/, f);
+  }
+  assert.throws(() => readFileSafe(dir, '../outside.txt'), /خارج/);
 });

@@ -276,9 +276,15 @@ export function findGrowingCollection(dir) {
   return matchGrowingCollection(searchCode(dir, COLLECTION_DECL), searchCode(dir, COLLECTION_GROW));
 }
 
+// Files that hold secrets are never read, whatever the folder's .gitignore says (the project folder
+// comes from the user, but the file name can come from the model).
+const SECRET_FILE = /(^|[\\/])(\.env(\..*)?|\.npmrc|\.netrc|\.pgpass|id_(rsa|dsa|ecdsa|ed25519)[^\\/]*|[^\\/]*\.(pem|key|p12|pfx|keystore|jks)|credentials(\.json)?)$/i;
+export const isSecretFile = (rel) => SECRET_FILE.test(String(rel)) || /(^|[\\/])\.(ssh|aws|gnupg)([\\/]|$)/i.test(String(rel));
+
 export function readFileSafe(dir, rel, fromLine = 1, toLine = 120) {
   const abs = path.resolve(dir, rel);
   if (!abs.startsWith(path.resolve(dir))) throw new Error('مسیر خارج از پوشهٔ پروژه است.');
+  if (isSecretFile(path.relative(dir, abs)) || isSecretFile(abs)) throw new Error('این فایل کلید یا رمز نگه می‌دارد و خوانده نمی‌شود.');
   if (makeIgnore(dir).ignores(path.relative(dir, abs).split(path.sep).join('/'))) throw new Error('این فایل جزو فایل‌های نادیده‌گرفته‌شده (مثل .env) است و خوانده نمی‌شود.');
   const lines = fs.readFileSync(abs, 'utf8').split(/\r?\n/);
   const a = Math.max(1, fromLine);

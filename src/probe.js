@@ -18,10 +18,22 @@ async function hit(url, timeoutMs) {
   }
 }
 
+// Only paths on the app itself. The model picks the paths and may have read them in the app's
+// logs, so an absolute URL or a "//host" path (which would replace the app's origin and could
+// carry data out in the query string) is refused, not fetched.
+export function pathOnApp(baseUrl, p) {
+  if (typeof p !== 'string' || !p.startsWith('/') || p.startsWith('//') || p.includes('\\')) return null;
+  const base = new URL(baseUrl.endsWith('/') ? baseUrl : baseUrl + '/');
+  const url = new URL(p, base);
+  return url.origin === base.origin ? url.toString() : null;
+}
+
 export async function httpCheck(baseUrl, { paths = ['/'], samples = 4, timeoutMs = 10000 } = {}) {
   const perPath = [];
+  const refused = [];
   for (const p of paths.slice(0, 5)) {
-    const url = new URL(p, baseUrl.endsWith('/') ? baseUrl : baseUrl + '/').toString();
+    const url = pathOnApp(baseUrl, p);
+    if (!url) { refused.push(String(p).slice(0, 80)); continue; }
     const results = [];
     for (let i = 0; i < samples; i++) {
       const r = await hit(url, timeoutMs);
@@ -58,5 +70,6 @@ export async function httpCheck(baseUrl, { paths = ['/'], samples = 4, timeoutMs
     p50ms: allLat.length ? Math.round(allLat.reduce((a, b) => a + b, 0) / allLat.length) : null,
     worstMs: Math.max(0, ...perPath.map((p) => p.maxMs || 0)),
     paths: perPath,
+    ...(refused.length ? { refused, refusedWhy: 'only paths on this app (starting with a single /) are checked' } : {}),
   };
 }

@@ -7,6 +7,7 @@ import { config } from '../config.js';
 import { analyzeProject, recommendPlan, searchCode, readFileSafe, fetchGithub, findGrowingCollection } from '../analyzer.js';
 import { deployRelease } from '../deployer.js';
 import { httpCheck } from '../probe.js';
+import { tehranHM, tehranHMS } from '../time.js';
 import { collectEvidence, verifyRecovery } from '../diagnose.js';
 import { maskEnvs, isSecretKey } from '../redact.js';
 import { registerApp, appInfo, canModify } from '../scope.js';
@@ -270,7 +271,7 @@ export const tools = [
       let re = null;
       if (filter) { try { re = new RegExp(filter, 'i'); } catch { re = null; } }
       const sel = (re ? lines.filter((l) => re.test(l.line)) : lines).slice(-80);
-      return { count: lines.length, shown: sel.length, lines: sel.map((l) => `${l.t ? new Date(l.t).toISOString().slice(11, 19) : ''} ${l.line.slice(0, 300)}`) };
+      return { count: lines.length, shown: sel.length, lines: sel.map((l) => `${l.t ? tehranHMS(l.t) : ''} ${l.line.slice(0, 300)}`), timesIn: 'Tehran' };
     },
   },
   {
@@ -284,7 +285,7 @@ export const tools = [
       const [a, cpu, mem, cat] = await Promise.all([liara.getApp(app), liara.metric(app, 'cpu', since), liara.metric(app, 'memory', since), liara.catalog()]);
       const plan = cat.plans.find((p) => p.id === a.planID);
       const pick = (arr) => arr.filter((_, i) => i % Math.ceil(arr.length / 20 || 1) === 0);
-      return { planID: a.planID, ramLimitMB: plan ? plan.ramGB * 1024 : null, cpuLimitCores: plan?.cpu ?? null, memoryMB: pick(mem).map((p) => ({ t: new Date(p.t).toISOString().slice(11, 16), mb: Math.round(p.v / MB) })), cpu: pick(cpu).map((p) => ({ t: new Date(p.t).toISOString().slice(11, 16), v: Math.round(p.v * 1000) / 1000 })) };
+      return { planID: a.planID, ramLimitMB: plan ? plan.ramGB * 1024 : null, cpuLimitCores: plan?.cpu ?? null, timesIn: 'Tehran', memoryMB: pick(mem).map((p) => ({ t: tehranHM(p.t), mb: Math.round(p.v / MB) })), cpu: pick(cpu).map((p) => ({ t: tehranHM(p.t), v: Math.round(p.v * 1000) / 1000 })) };
     },
   },
   {

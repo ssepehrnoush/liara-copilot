@@ -23,6 +23,11 @@ const liara = config.liaraMode === 'sim'
 if (liara.restore) await liara.restore();
 
 const app = express();
+// A page on another site can send a "simple" POST to localhost without asking the browser first,
+// but not one with a JSON content type. Every state-changing call must be JSON (the UI's always
+// is), so such a page cannot press approve or turn the kill switch off.
+// (The header itself is checked: req.is() ignores it on a POST with no body, like "new chat".)
+app.use('/api', (req, res, next) => (req.method === 'POST' && !/^application\/json\b/i.test(req.headers['content-type'] || '') ? res.status(415).json({ error: 'JSON only' }) : next()));
 app.use(express.json({ limit: '1mb' }));
 
 // ---- optional passcode (for a public deployment of the copilot itself) ----
@@ -43,7 +48,9 @@ app.get('/api/config', (_req, res) => res.json({ ...publicConfig(), llmAvailable
 
 // Emergency stop: from now on only read-only tools run; open approval cards are rejected.
 app.post('/api/killswitch', (req, res) => {
-  const on = Boolean(req.body?.on);
+  // Only an explicit true or false counts: a missing value never turns the stop off.
+  if (typeof req.body?.on !== 'boolean') return res.status(400).json({ error: 'body must be {"on": true|false}' });
+  const { on } = req.body;
   if (!on && killSwitch().forced) return res.status(409).json({ error: 'COPILOT_READONLY=1 is set on the server', killSwitch: killSwitch() });
   const ks = setKillSwitch(on);
   if (on) rejectAllPending('kill switch');
@@ -186,7 +193,7 @@ app.use('/assets', express.static(path.join(config.root, 'assets')));
 
 startWatcher(liara, (alert) => broadcast('alert', { alert }), makeRuleRunner(liara, (type, data) => { statusCache.at = 0; broadcast(type, data); }));
 
-const server = app.listen(config.port, () => {
+const server = app.listen(config.port, config.host, () => {
   const c = publicConfig();
   console.log(`Liara Copilot on http://localhost:${config.port}  (liara: ${c.liaraMode}, llm: ${c.llmProvider}/${c.llmModel}, token: ${c.hasLiaraToken ? 'yes' : 'NO'})`);
 });

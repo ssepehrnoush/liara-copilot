@@ -13,21 +13,19 @@
   <header class="topbar">
     <div class="brand">
       <div class="logo" aria-hidden="true">
-        <svg viewBox="0 0 32 32" width="28" height="28"><circle cx="16" cy="16" r="14" fill="var(--accent)"/><path d="M10 17l4 4 8-9" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <svg viewBox="0 0 32 32" width="26" height="26"><rect x="1" y="1" width="30" height="30" rx="9" fill="var(--accent)"/><path d="M10 17l4 4 8-9" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </div>
-      <div>
-        <div class="title">لیارا کوپایلت</div>
-        <div class="subtitle">دستیار دیپلوی و نگهداری سایت روی لیارا</div>
+      <div class="title" title="دستیار دیپلوی و نگهداری سایت روی لیارا">لیارا کوپایلت</div>
+      <div class="status">
+        <span id="modeChip" class="chip">...</span>
+        <span id="modelChip" class="chip muted"></span>
       </div>
     </div>
     <div class="chips">
-      <span id="modeChip" class="chip">...</span>
-      <span id="modelChip" class="chip muted"></span>
-      <span id="costChip" class="chip muted hidden"></span>
       <a class="chip link" href="paths.html" title="مقایسهٔ مدل‌ها، هزینهٔ هر گفتگو و اجرا روی سرور خودی">مسیرهای اجرا</a>
-      <span id="balanceChip" class="chip"></span>
-      <button id="killBtn" class="ghost small killbtn" title="توقف اضطراری: از این لحظه هیچ تغییری روی لیارا انجام نمی‌شود">🛑 توقف اقدامات</button>
       <button id="resetBtn" class="ghost small" title="شروع گفتگوی تازه">گفتگوی تازه</button>
+      <button id="killBtn" class="ghost small killbtn" title="توقف اضطراری: از این لحظه هیچ تغییری روی لیارا انجام نمی‌شود">توقف اضطراری</button>
+      <span id="balanceChip" class="hidden"></span>
     </div>
   </header>
 
@@ -35,12 +33,12 @@
     <section class="chat" aria-label="گفتگو">
       <div id="messages" class="messages">
         <div class="welcome" id="welcome">
-          <h2>سلام! من کوپایلت لیارا هستم.</h2>
-          <p>پروژه‌تان را بدهید تا روی لیارا منتشرش کنم، یا اگر سایت کند شده یا خطا می‌دهد بگویید تا علتش را از روی لاگ و مصرف منابع پیدا کنم.</p>
+          <h2>سلام! چه کاری روی لیارا انجام بدهیم؟</h2>
+          <p>پروژه‌تان را بدهید تا منتشرش کنم، یا بگویید سایت کجا مشکل دارد تا علتش را از روی لاگ و مصرف منابع پیدا کنم.</p>
           <ul class="rules">
-            <li><b>خودکار:</b> خواندن وضعیت، لاگ، مصرف CPU و رم، تست زندهٔ سایت و تحلیل کد.</li>
-            <li><b>فقط با تأیید شما:</b> ساخت سرویس، انتشار نسخه، تغییر متغیرها، ری‌استارت، تغییر پلن و خاموش کردن.</li>
-            <li><b>هرگز:</b> حذف سرویس، دیتابیس یا دیسک. این کار فقط از کنسول لیارا و به دست خودتان انجام می‌شود.</li>
+            <li><span class="r-dot ok"></span><span><b>خودکار:</b> خواندن وضعیت، لاگ، مصرف CPU و رم، تست زندهٔ سایت و تحلیل کد.</span></li>
+            <li><span class="r-dot warn"></span><span><b>فقط با تأیید شما:</b> ساخت سرویس، انتشار نسخه، تغییر متغیرها، ری‌استارت، تغییر پلن و خاموش کردن.</span></li>
+            <li><span class="r-dot bad"></span><span><b>هرگز:</b> حذف سرویس، دیتابیس یا دیسک. این کار فقط از کنسول لیارا و به دست خودتان انجام می‌شود.</span></li>
           </ul>
         </div>
       </div>
@@ -55,7 +53,7 @@
         </div>
         <form id="form" class="inputrow">
           <textarea id="input" rows="1" placeholder="درخواستتان را ساده بنویسید؛ مثلاً «سایتم بالا نمیاد»" aria-label="پیام"></textarea>
-          <button id="send" type="submit" class="primary">ارسال</button>
+          <button id="send" type="submit" class="primary send">ارسال</button>
         </form>
       </div>
     </section>
@@ -63,6 +61,7 @@
     <aside class="side" aria-label="وضعیت سرویس‌ها">
       <div id="killBox" class="alert down hidden"><span class="msg-a">🛑 توقف اضطراری روشن است: کوپایلت فقط می‌خواند و هیچ تغییری روی لیارا نمی‌دهد.</span></div>
       <div id="alertBox" class="alert hidden"></div>
+      <div class="session"><span id="costChip" class="chip muted hidden"></span></div>
       <div class="tabs" role="tablist">
         <button class="tab active" data-tab="status" role="tab">وضعیت زنده</button>
         <button class="tab" data-tab="audit" role="tab">گزارش اقدامات</button>

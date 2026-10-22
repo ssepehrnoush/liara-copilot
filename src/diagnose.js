@@ -285,7 +285,7 @@ function rankHypotheses(ev, { latest, prevReady, containerStart }) {
       id: 'bad_release',
       title: 'باگ در آخرین نسخهٔ منتشرشده',
       confidence: 0.6,
-      evidence: [`${n(err5xx)} از ${n(total)} درخواست تست خطای 5xx گرفت.`, `اولین خطا ${new Date(firstErr).toLocaleTimeString('fa-IR')} بعد از انتشار ریلیز ${latest.tag || ''} ثبت شده.`, ev.logs.topErrors[0] ? `خطای غالب: «${ev.logs.topErrors[0].sample.slice(0, 140)}»` : null].filter(Boolean),
+      evidence: [`${n(err5xx)} از ${n(total)} درخواست تست خطای 5xx گرفت.`, `اولین خطا ${new Date(firstErr).toLocaleTimeString('fa-IR', { timeZone: 'Asia/Tehran' })} بعد از انتشار ریلیز ${latest.tag || ''} ثبت شده.`, ev.logs.topErrors[0] ? `خطای غالب: «${ev.logs.topErrors[0].sample.slice(0, 140)}»` : null].filter(Boolean),
       fix: prevReady?.sourceAvailable ? { tool: 'rollback_release', args: { releaseID: prevReady.id }, fa: 'برگشت به ریلیز سالم قبلی' } : { tool: 'fix_code', fa: 'پیدا کردن باگ در کد و اصلاحش با تأیید شما، یا گزارش برای ایجنت کدنویس' },
     });
   } else if (err5xx && !H.length) {

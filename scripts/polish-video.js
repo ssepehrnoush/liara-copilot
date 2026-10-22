@@ -1,7 +1,7 @@
-// Final edit of the demo video: animated intro, chapter and outro cards (art made with
-// OpenArt, Persian text and motion rendered here), one-sentence subtitles, a chapter badge,
+// Final edit of the demo video: animated intro, chapter and outro cards (flat drawings from
+// card-art.js, Persian text and motion rendered here), one-sentence subtitles, a chapter badge,
 // and soft fades between parts.
-//   node scripts/polish-video.js --rec _share/rec-final --art _share/art --narration _share/defense/narration-timed.json --out _share/video
+//   node scripts/polish-video.js --rec _share/rec-final --narration _share/defense/narration-timed.json --out _share/video
 // With --voice DIR (clips from scripts/voice-over.js), the subtitles come from the recording's
 // own cues, silent stretches are squeezed, and the voice clips become the soundtrack.
 import fs from 'node:fs';
@@ -9,11 +9,11 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { chromium } from 'playwright-core';
+import { cardHtml as flatCardHtml } from './card-art.js';
 
 const args = process.argv.slice(2);
 const opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
 const REC = path.resolve(opt('--rec', '_share/rec-final'));
-const ART = path.resolve(opt('--art', '_share/art'));
 const NAR = path.resolve(opt('--narration', '_share/defense/narration-timed.json'));
 const VOICE = opt('--voice', '') && path.resolve(opt('--voice'));
 // Current narration by line id: a line edited after the recording is spoken and subtitled
@@ -172,41 +172,8 @@ const frameF = 'scale=1920:960:flags=lanczos,pad=1920:1080:0:0:color=0x0d1117';
 spawnSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'concat', '-safe', '0', '-i', frames, '-vf', `${frameF},ass='${assP}':fontsdir='${fontsdir}'`, ...ENC, path.join(WORK, 'main-sub.mp4')], { cwd: REC, stdio: 'inherit' });
 
 // ---------------------------------------------------------------- 2) cards rendered as HTML animations
-const img = (f) => pathToFileURL(path.join(ART, f)).href;
-const BASE_CSS = `
-@font-face{font-family:Vazirmatn;font-weight:400;src:url('${FONT}/Vazirmatn-Regular.ttf')}
-@font-face{font-family:Vazirmatn;font-weight:700;src:url('${FONT}/Vazirmatn-Bold.ttf')}
-@font-face{font-family:Vazirmatn;font-weight:900;src:url('${FONT}/Vazirmatn-Black.ttf')}
-*{margin:0;box-sizing:border-box}
-html,body{width:1920px;height:1080px;overflow:hidden;background:#060b17;font-family:Vazirmatn;color:#fff;direction:rtl}
-.bg{position:absolute;inset:-60px;background-size:cover;background-position:center;filter:blur(46px) saturate(1.3) brightness(.55);animation:bgz 6s ease-out both}
-.veil{position:absolute;inset:0;background:radial-gradient(ellipse at 30% 50%,rgba(20,120,255,.18),transparent 60%),linear-gradient(90deg,rgba(6,11,23,.15) 0%,rgba(6,11,23,.75) 55%,rgba(6,11,23,.92) 100%)}
-.grid{position:absolute;inset:0;background-image:linear-gradient(rgba(120,190,255,.06) 1px,transparent 1px),linear-gradient(90deg,rgba(120,190,255,.06) 1px,transparent 1px);background-size:64px 64px;mask-image:radial-gradient(ellipse at 70% 50%,#000 20%,transparent 70%);animation:gridm 6s linear both}
-.art{position:absolute;left:150px;top:50%;width:720px;height:720px;margin-top:-360px;border-radius:44px;background-size:cover;box-shadow:0 0 120px rgba(40,140,255,.35),0 30px 80px rgba(0,0,0,.5);animation:pop 1.1s cubic-bezier(.2,.9,.25,1.15) both, float 6s ease-in-out 1.1s forwards}
-.txt{position:absolute;right:150px;top:50%;width:820px;transform:translateY(-50%)}
-.kicker{font-size:30px;font-weight:700;color:#4cd8f5;letter-spacing:1px;animation:up .7s .25s both}
-h1{font-size:96px;font-weight:900;line-height:1.25;margin-top:14px;animation:up .8s .4s both;text-shadow:0 8px 40px rgba(0,0,0,.5)}
-.sub{font-size:36px;font-weight:400;color:#c7d6ee;line-height:1.7;margin-top:18px;animation:up .8s .62s both}
-.chips{display:flex;gap:14px;margin-top:34px;flex-wrap:wrap;animation:up .8s .85s both}
-.chip{font-size:24px;font-weight:700;padding:8px 22px;border-radius:999px;background:rgba(76,216,245,.12);border:1px solid rgba(76,216,245,.45);color:#bff3ff}
-.num{position:absolute;right:150px;top:150px;font-size:190px;font-weight:900;color:rgba(76,216,245,.14);animation:up .9s .1s both}
-.bar{position:absolute;right:150px;bottom:150px;height:6px;width:820px;border-radius:6px;background:rgba(255,255,255,.08);overflow:hidden}
-.bar i{display:block;height:100%;width:100%;background:linear-gradient(90deg,#1478ff,#4cd8f5);transform-origin:right;animation:fill var(--dur) linear both}
-.url{font-family:ui-monospace,Consolas,monospace;direction:ltr;unicode-bidi:plaintext;text-align:right;font-size:34px;color:#fff;margin-top:26px;animation:up .8s .8s both}
-@keyframes up{from{opacity:0;transform:translateY(34px)}to{opacity:1;transform:none}}
-@keyframes pop{from{opacity:0;transform:scale(.82) rotate(-2deg)}to{opacity:1;transform:none}}
-@keyframes float{from{transform:translateY(0)}to{transform:translateY(-14px)}}
-@keyframes bgz{from{transform:scale(1.12)}to{transform:scale(1)}}
-@keyframes gridm{from{background-position:0 0}to{background-position:-64px 0}}
-@keyframes fill{from{transform:scaleX(0)}to{transform:scaleX(1)}}
-`;
-const cardHtml = (c) => `<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><style>${BASE_CSS}</style></head><body style="--dur:${c.dur}s">
-<div class="bg" style="background-image:url('${img(c.icon)}')"></div><div class="veil"></div><div class="grid"></div>
-${c.num ? `<div class="num">${c.num}</div>` : ''}
-<div class="art" style="background-image:url('${img(c.icon)}')"></div>
-<div class="txt">${c.kicker ? `<div class="kicker">${c.kicker}</div>` : ''}<h1>${c.title}</h1>${c.sub ? `<div class="sub">${c.sub}</div>` : ''}${c.url ? `<div class="url">${c.url}</div>` : ''}${c.chips ? `<div class="chips">${c.chips.map((x) => `<span class="chip">${x}</span>`).join('')}</div>` : ''}</div>
-${c.bar ? '<div class="bar"><i></i></div>' : ''}
-</body></html>`;
+// The look (flat drawings, light background, Persian text) lives in card-art.js.
+const cardHtml = (c) => flatCardHtml(c, FONT);
 
 const cards = [
   { id: 'intro', dur: cardDur('intro', CARD.intro), icon: 'hero.png', kicker: 'چالش لیارا · هکاتون Agentic AI استارکوچ', title: 'لیارا کوپایلت', sub: 'دستیاری که به برنامه‌نویس‌ها کمک می‌کند سایتشان را روی لیارا منتشر و نگهداری کنند', chips: ['اتصال مستقیم به لیارا', 'هر تغییر با تأیید کاربر', 'پیدا کردن و رفع علت خطا'] },
