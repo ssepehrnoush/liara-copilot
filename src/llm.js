@@ -105,6 +105,12 @@ async function open(p, { messages, tools, maxTokens, cacheKey, last = true }) {
   if ((p.name === 'openai' && /gpt-5/.test(p.model)) || /gpt-5\.[6-9]|gpt-6/.test(p.model)) body.reasoning_effort = 'none';
   // Through BoxAPI the same models accept tools with low effort; keeps the shared credit lean.
   else if (reasoning) body.reasoning_effort = process.env.LLM_REASONING_EFFORT || 'low';
+  // Open-weight models on the gateway think by default (slower, more tokens). LLM_REASONING sets
+  // the gateway's reasoning object instead: an effort (none, low, ...) or "off" to disable it.
+  if (p.name === 'boxapi' && process.env.LLM_REASONING) {
+    delete body.reasoning_effort;
+    body.reasoning = process.env.LLM_REASONING === 'off' ? { enabled: false } : { effort: process.env.LLM_REASONING };
+  }
   if (process.env.LLM_TEMPERATURE) body.temperature = Number(process.env.LLM_TEMPERATURE);
   if (tools?.length) {
     body.tools = tools;

@@ -45,6 +45,7 @@ button { font-family: inherit; font-size: inherit; cursor: pointer; }
 .chip.real { background: var(--ok-soft); color: var(--ok); border-color: transparent; }
 .chip.sim { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
 .chip.muted { color: var(--muted); }
+.chip.link { color: var(--accent); background: var(--accent-soft); border-color: transparent; text-decoration: none; }
 
 .primary { background: var(--accent); color: #fff; border: 0; border-radius: 10px; padding: 8px 18px; font-weight: 500; }
 .primary:disabled { opacity: .45; cursor: not-allowed; }

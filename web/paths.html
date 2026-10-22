@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>مسیرهای اجرا | لیارا کوپایلت</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="paths.css">
+</head>
+<body class="paths">
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo" aria-hidden="true">
+        <svg viewBox="0 0 32 32" width="28" height="28"><circle cx="16" cy="16" r="14" fill="var(--accent)"/><path d="M10 17l4 4 8-9" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div>
+        <div class="title">مسیرهای اجرا</div>
+        <div class="subtitle">لیارا کوپایلت با کدام مدل، با چه هزینه و چه کیفیتی</div>
+      </div>
+    </div>
+    <div class="chips">
+      <span class="chip muted" id="measuredChip"></span>
+      <a class="chip back" href="/">بازگشت به کوپایلت</a>
+    </div>
+  </header>
+
+  <main class="pmain">
+    <section class="hero">
+      <h1>یک کار، چند مسیر</h1>
+      <p class="lead">همان چهار کارِ دمو را با هر مسیر از اول اجرا کردیم: <b>دیپلوی اول، انتشار نسخهٔ جدید، رفع خطای ۵۰۰ و رفع نشت حافظه با اصلاح کد</b>. هر عدد این صفحه اندازه‌گیری شده است، مگر جایی که برچسب «تخمین» دارد. لیارا می‌تواند برای هر پلن کاربر یک مسیر انتخاب کند.</p>
+      <div class="tiles" id="tiles"></div>
+    </section>
+
+    <section class="card block" aria-labelledby="h-results">
+      <h2 id="h-results">نتیجهٔ سنجش</h2>
+      <p class="sub">هر ستون یک کار است. یک «گفتگوی کامل» یعنی هر چهار کار پشت سر هم در یک گفتگو.</p>
+      <div class="tablewrap"><table class="ptable" id="resultsTable"></table></div>
+    </section>
+
+    <section class="card block" aria-labelledby="h-cost">
+      <h2 id="h-cost">هزینهٔ هر گفتگوی کامل</h2>
+      <p class="sub">به تومان، با هزینه‌ای که BoxAPI برای هر درخواست اعلام کرد. روی هر میله بروید تا جزئیات را ببینید.</p>
+      <div class="legend" id="costLegend"></div>
+      <div class="chart" id="costChart"></div>
+    </section>
+
+    <section class="card block" aria-labelledby="h-calc">
+      <h2 id="h-calc">هزینهٔ ماهانه برای لیارا</h2>
+      <p class="sub">تعداد کاربر را عوض کنید. API یعنی پرداخت به‌ازای هر گفتگو؛ سرور خودی یعنی اجارهٔ ثابت کارت گرافیک، هر وقت ظرفیت پر شد یک کارت دیگر.</p>
+      <div class="controls">
+        <label class="ctl">
+          <span>تعداد کاربر</span>
+          <input type="range" id="users" min="500" max="50000" step="500" value="10000" aria-describedby="usersOut">
+          <output id="usersOut"></output>
+        </label>
+        <label class="ctl">
+          <span>گفتگوی کامل برای هر کاربر در ماه</span>
+          <select id="perUser">
+            <option value="0.5">نیم</option>
+            <option value="1" selected>۱</option>
+            <option value="2">۲</option>
+            <option value="4">۴</option>
+          </select>
+        </label>
+      </div>
+      <div class="tiles small" id="calcTiles"></div>
+      <div class="legend" id="lineLegend"></div>
+      <div class="chart" id="lineChart"></div>
+      <p class="assume" id="calcAssume"></p>
+    </section>
+
+    <section class="card block" aria-labelledby="h-host">
+      <h2 id="h-host">اگر مدل روی سرور خودِ لیارا اجرا شود <span class="tag est">تخمین</span></h2>
+      <p class="sub" id="hostSub"></p>
+      <div class="tablewrap"><table class="ptable" id="hostTable"></table></div>
+      <p class="takeaway" id="hostTakeaway"></p>
+    </section>
+
+    <div class="grid2">
+      <section class="card block" aria-labelledby="h-rej">
+        <h2 id="h-rej">مسیرهایی که کنار گذاشتیم</h2>
+        <ul class="rej" id="rejected"></ul>
+      </section>
+      <section class="card block" aria-labelledby="h-switch">
+        <h2 id="h-switch">عوض کردن مسیر</h2>
+        <p class="sub">بدون تغییر کد، فقط با سه متغیر محیطی:</p>
+        <pre class="env" dir="ltr">LLM_PROVIDER=boxapi
+BOXAPI_MODEL=qwen/qwen3.6-35b-a3b
+LLM_REASONING=off</pre>
+        <p class="sub">برای gpt-oss مقدار <code dir="ltr">LLM_REASONING=medium</code> لازم است. <code dir="ltr">LLM_PROVIDER=none</code> کوپایلت را به حالت قواعد می‌برد. هزینهٔ هر گفتگو همیشه بالای صفحهٔ کوپایلت دیده می‌شود.</p>
+      </section>
+    </div>
+
+    <section class="card block" aria-labelledby="h-method">
+      <h2 id="h-method">روش سنجش و منابع</h2>
+      <ul class="method" id="method"></ul>
+      <ul class="sources" id="sources"></ul>
+    </section>
+  </main>
+
+  <div id="tip" class="tip" role="tooltip" hidden></div>
+  <script src="paths.js"></script>
+</body>
+</html>

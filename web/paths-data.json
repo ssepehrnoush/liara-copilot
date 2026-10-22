@@ -1,0 +1,470 @@
+{
+ "measuredAt": "2026-10-22",
+ "usdToman": 270000,
+ "scenarios": {
+  "s1": "دیپلوی اول",
+  "s2": "نسخهٔ جدید",
+  "s3": "رفع خطای ۵۰۰",
+  "s4": "رفع نشت حافظه با اصلاح کد"
+ },
+ "paths": [
+  {
+   "id": "rules",
+   "name": "حالت قواعد",
+   "model": "بدون مدل",
+   "kind": "none",
+   "via": "خودِ کوپایلت",
+   "runs": {
+    "s1": {
+     "ok": true,
+     "calls": 0,
+     "costUSD": 0,
+     "seconds": 5
+    },
+    "s2": {
+     "ok": true,
+     "calls": 0,
+     "costUSD": 0,
+     "seconds": 5
+    },
+    "s3": {
+     "ok": true,
+     "calls": 0,
+     "costUSD": 0,
+     "seconds": 7.7
+    },
+    "s4": {
+     "ok": true,
+     "calls": 0,
+     "costUSD": 0,
+     "seconds": 34.6,
+     "memoryAfterMB": 142
+    }
+   },
+   "note": "رایگان و بی‌وابستگی، ولی فقط درخواست‌های مشخص را می‌فهمد و اصلاح کدش عمومی است (سقف ۱۰۰ مورد برای آرایه)."
+  },
+  {
+   "id": "gpt-6-sol",
+   "name": "GPT-6 Sol",
+   "model": "openai/gpt-6-sol",
+   "kind": "closed",
+   "via": "BoxAPI (پیش‌فرض فعلی)",
+   "reasoning": "none",
+   "runs": {
+    "s1": {
+     "ok": true,
+     "calls": 3,
+     "inputTokens": 11168,
+     "cachedTokens": 0,
+     "outputTokens": 256,
+     "costUSD": 0.024896,
+     "seconds": 11.7,
+     "retries": 0
+    },
+    "s2": {
+     "ok": true,
+     "calls": 2,
+     "inputTokens": 8781,
+     "cachedTokens": 3151,
+     "outputTokens": 123,
+     "costUSD": 0.01312,
+     "seconds": 9.1,
+     "retries": 0
+    },
+    "s3": {
+     "ok": true,
+     "calls": 3,
+     "inputTokens": 16257,
+     "cachedTokens": 13417,
+     "outputTokens": 273,
+     "costUSD": 0.011093,
+     "seconds": 15.8,
+     "retries": 0
+    },
+    "s4": {
+     "ok": true,
+     "calls": 3,
+     "inputTokens": 21989,
+     "cachedTokens": 16410,
+     "outputTokens": 802,
+     "costUSD": 0.02246,
+     "seconds": 45.9,
+     "retries": 0,
+     "memoryAfterMB": 56
+    }
+   },
+   "note": "بهترین اصلاح کد (شمارنده به‌جای تاریخچه) و سریع، ولی ۱۰ تا ۲۰ برابر گران‌تر از بقیه."
+  },
+  {
+   "id": "gpt-6-luna",
+   "name": "GPT-6 Luna",
+   "model": "openai/gpt-6-luna",
+   "kind": "closed",
+   "via": "BoxAPI",
+   "reasoning": "none",
+   "runs": {
+    "s1": {
+     "ok": true,
+     "calls": 4,
+     "inputTokens": 14268,
+     "cachedTokens": 3249,
+     "outputTokens": 194,
+     "costUSD": 0.002998,
+     "seconds": 14.7,
+     "retries": 0
+    },
+    "s2": {
+     "ok": true,
+     "calls": 2,
+     "inputTokens": 8506,
+     "cachedTokens": 3151,
+     "outputTokens": 92,
+     "costUSD": 0.001474,
+     "seconds": 9.9,
+     "retries": 0
+    },
+    "s3": {
+     "ok": true,
+     "calls": 3,
+     "inputTokens": 15656,
+     "cachedTokens": 13092,
+     "outputTokens": 183,
+     "costUSD": 0.000918,
+     "seconds": 17.7,
+     "retries": 0
+    },
+    "s4": {
+     "ok": true,
+     "calls": 3,
+     "inputTokens": 21075,
+     "cachedTokens": 15928,
+     "outputTokens": 608,
+     "costUSD": 0.001863,
+     "seconds": 45,
+     "retries": 0,
+     "memoryAfterMB": 127
+    }
+   },
+   "note": "هم‌سرعتِ Sol و ۱۰ برابر ارزان‌تر. اصلاح نشت را با سقف گذاشتن انجام داد، نه بازنویسی."
+  },
+  {
+   "id": "deepseek-v4-flash",
+   "name": "DeepSeek V4 Flash",
+   "model": "deepseek/deepseek-v4-flash",
+   "kind": "open",
+   "via": "BoxAPI",
+   "reasoning": "none",
+   "runs": {
+    "s1": {
+     "ok": true,
+     "calls": 3,
+     "inputTokens": 15348,
+     "cachedTokens": 8704,
+     "outputTokens": 620,
+     "costUSD": 0.000775,
+     "seconds": 27.2,
+     "retries": 0
+    },
+    "s2": {
+     "ok": true,
+     "calls": 3,
+     "inputTokens": 18873,
+     "cachedTokens": 10240,
+     "outputTokens": 425,
+     "costUSD": 0.000832,
+     "seconds": 35.6,
+     "retries": 0
+    },
+    "s3": {
+     "ok": true,
+     "calls": 3,
+     "inputTokens": 23386,
+     "cachedTokens": 18944,
+     "outputTokens": 435,
+     "costUSD": 0.000733,
+     "seconds": 31.9,
+     "retries": 0
+    },
+    "s4": {
+     "ok": true,
+     "calls": 3,
+     "inputTokens": 30767,
+     "cachedTokens": 25088,
+     "outputTokens": 1624,
+     "costUSD": 0.001123,
+     "seconds": 65.6,
+     "retries": 0,
+     "memoryAfterMB": 56
+    }
+   },
+   "note": "بسیار ارزان با اصلاح کدِ هم‌کیفیتِ Sol، ولی حدود دو برابر کندتر."
+  },
+  {
+   "id": "qwen3.6-35b-a3b",
+   "name": "Qwen3.6 35B",
+   "model": "qwen/qwen3.6-35b-a3b",
+   "kind": "open",
+   "via": "BoxAPI",
+   "reasoning": "off",
+   "runs": {
+    "s1": {
+     "ok": true,
+     "calls": 3,
+     "inputTokens": 15590,
+     "cachedTokens": 8448,
+     "outputTokens": 373,
+     "costUSD": 0.001693,
+     "seconds": 10.7,
+     "retries": 0
+    },
+    "s2": {
+     "ok": true,
+     "calls": 2,
+     "inputTokens": 11974,
+     "cachedTokens": 9504,
+     "outputTokens": 145,
+     "costUSD": 0.000981,
+     "seconds": 9.7,
+     "retries": 0
+    },
+    "s3": {
+     "ok": true,
+     "calls": 3,
+     "inputTokens": 21463,
+     "cachedTokens": 5280,
+     "outputTokens": 336,
+     "costUSD": 0.002512,
+     "seconds": 18.7,
+     "retries": 0
+    },
+    "s4": {
+     "ok": true,
+     "calls": 3,
+     "inputTokens": 27930,
+     "cachedTokens": 11616,
+     "outputTokens": 1147,
+     "costUSD": 0.003738,
+     "seconds": 66,
+     "retries": 0,
+     "memoryAfterMB": 56
+    }
+   },
+   "note": "روی یک کارت RTX 4090 جا می‌شود؛ بهترین کاندید برای سرور خودی. اصلاح کدش هم‌کیفیتِ Sol بود."
+  },
+  {
+   "id": "gpt-oss-120b",
+   "name": "gpt-oss-120b",
+   "model": "openai/gpt-oss-120b",
+   "kind": "open",
+   "via": "BoxAPI",
+   "reasoning": "medium",
+   "runs": {
+    "s1": {
+     "ok": true,
+     "calls": 4,
+     "inputTokens": 14781,
+     "cachedTokens": 320,
+     "outputTokens": 531,
+     "costUSD": 0.00062,
+     "seconds": 19.6,
+     "retries": 0
+    },
+    "s2": {
+     "ok": true,
+     "calls": 2,
+     "inputTokens": 8782,
+     "cachedTokens": 160,
+     "outputTokens": 233,
+     "costUSD": 0.000352,
+     "seconds": 13.4,
+     "retries": 0
+    },
+    "s3": {
+     "ok": true,
+     "calls": 3,
+     "inputTokens": 16386,
+     "cachedTokens": 4800,
+     "outputTokens": 367,
+     "costUSD": 0.000641,
+     "seconds": 23.6,
+     "retries": 0
+    },
+    "s4": {
+     "ok": true,
+     "calls": 5,
+     "inputTokens": 40131,
+     "cachedTokens": 400,
+     "outputTokens": 1791,
+     "costUSD": 0.001756,
+     "seconds": 106.8,
+     "retries": 1,
+     "memoryAfterMB": 128
+    }
+   },
+   "note": "ارزان‌ترین مسیرِ ۴ از ۴. با فکر کردنِ «کم» فقط ۱ از ۴ موفق بود چون دستور را به‌جای اجرا متن نوشت؛ «متوسط» لازم است."
+  },
+  {
+   "id": "gpt-oss-20b",
+   "name": "gpt-oss-20b",
+   "model": "openai/gpt-oss-20b",
+   "kind": "open",
+   "via": "BoxAPI",
+   "reasoning": "low",
+   "runs": {
+    "s1": {
+     "ok": true,
+     "calls": 3,
+     "inputTokens": 11435,
+     "cachedTokens": 3328,
+     "outputTokens": 303,
+     "costUSD": 0.000947,
+     "seconds": 9.1,
+     "retries": 0
+    },
+    "s2": {
+     "ok": true,
+     "calls": 2,
+     "inputTokens": 8920,
+     "cachedTokens": 0,
+     "outputTokens": 133,
+     "costUSD": 0.000815,
+     "seconds": 8.7,
+     "retries": 0
+    },
+    "s3": {
+     "ok": true,
+     "calls": 3,
+     "inputTokens": 16238,
+     "cachedTokens": 3328,
+     "outputTokens": 196,
+     "costUSD": 0.001325,
+     "seconds": 14.6,
+     "retries": 0
+    },
+    "s4": {
+     "ok": false,
+     "calls": 2,
+     "inputTokens": 13811,
+     "cachedTokens": 3328,
+     "outputTokens": 57,
+     "costUSD": 0.000348,
+     "seconds": 14.8,
+     "retries": 0,
+     "memoryAfterMB": null
+    }
+   },
+   "note": "سه کار اول را درست کرد؛ در نشت حافظه علت را دید ولی اصلاحی پیشنهاد نداد."
+  }
+ ],
+ "selfHost": {
+  "cacheShare": 0.57,
+  "busyHoursPerMonth": 300,
+  "gpus": {
+   "rtx4090": {
+    "name": "RTX 4090 (۲۴ گیگ)",
+    "monthlyToman": 86000000,
+    "source": "irangpu"
+   },
+   "h100": {
+    "name": "H100 (۸۰ گیگ)",
+    "monthlyToman": null,
+    "source": null
+   }
+  },
+  "models": [
+   {
+    "id": "qwen3.6-35b-a3b",
+    "params": "۳۵ میلیارد (۳ میلیارد فعال)",
+    "memory": "حدود ۲۰ گیگ در ۴ بیت",
+    "gpu": "rtx4090",
+    "gpuCount": 1,
+    "tokPerSec": [
+     1000,
+     2259
+    ],
+    "throughputSource": "cloudrift",
+    "assumed": false
+   },
+   {
+    "id": "gpt-oss-20b",
+    "params": "۲۱ میلیارد (۳٫۶ میلیارد فعال)",
+    "memory": "حدود ۱۳ تا ۱۶ گیگ (MXFP4)",
+    "gpu": "rtx4090",
+    "gpuCount": 1,
+    "tokPerSec": [
+     1000,
+     2259
+    ],
+    "throughputSource": "cloudrift",
+    "assumed": true
+   },
+   {
+    "id": "gpt-oss-120b",
+    "params": "۱۱۷ میلیارد (۵٫۱ میلیارد فعال)",
+    "memory": "حدود ۶۳ گیگ (MXFP4)",
+    "gpu": "h100",
+    "gpuCount": 1,
+    "tokPerSec": [
+     1000,
+     8973
+    ],
+    "throughputSource": "inferencex",
+    "assumed": false
+   },
+   {
+    "id": "deepseek-v4-flash",
+    "params": "۲۸۴ میلیارد (۱۳ میلیارد فعال)",
+    "memory": "حدود ۲۸۴ گیگ در ۸ بیت",
+    "gpu": "h100",
+    "gpuCount": 4,
+    "tokPerSec": null,
+    "throughputSource": null,
+    "assumed": false
+   }
+  ]
+ },
+ "rejected": [
+  {
+   "name": "rayegan (روتر APIهای رایگان)",
+   "why": "سرویس‌های رایگان از IP ایران خطای ۴۰۳ می‌دهند و سرورهای لیارا IP ایرانی دارند؛ در عمل روی لیارا کار نمی‌کند. ۳۰ مهر کنار گذاشته شد."
+  },
+  {
+   "name": "مدل‌های هوش مصنوعی خودِ لیارا",
+   "why": "شرایط اعتبار هکاتون استفاده از هوش مصنوعی روی این اعتبار را مجاز نمی‌داند."
+  },
+  {
+   "name": "اجرا روی CPU (بدون کارت گرافیک)",
+   "why": "هر قدم ده‌ها هزار توکن ورودی دارد؛ روی CPU هر قدم چند دقیقه طول می‌کشد و برای گفتگو قابل استفاده نیست."
+  }
+ ],
+ "sources": {
+  "boxapi": {
+   "label": "قیمت مدل‌ها: فهرست مدل‌های BoxAPI (۳۰ مهر ۱۴۰۵)",
+   "url": "https://ai.boxapi.ir/ai/v1/models"
+  },
+  "irangpu": {
+   "label": "اجارهٔ RTX 4090 و L40S در ایران: irangpu",
+   "url": "https://irangpu.com/rent-gpu-server/"
+  },
+  "iranserver": {
+   "label": "اجارهٔ سرور GPU: ایران‌سرور",
+   "url": "https://www.iranserver.com/vps/gpu/"
+  },
+  "cloudrift": {
+   "label": "Qwen3 30B-A3B روی RTX 4090 با vLLM: CloudRift",
+   "url": "https://www.cloudrift.ai/blog/benchmarking-rtx-gpus-for-llm-inference"
+  },
+  "inferencex": {
+   "label": "gpt-oss-120b روی H100: InferenceX",
+   "url": "https://inferencex.semianalysis.com/run/gptoss-120b-on-h100"
+  },
+  "gpustack": {
+   "label": "gpt-oss روی H100: GPUStack",
+   "url": "https://docs.gpustack.ai/2.2/performance-lab/gpt-oss-120b/h100/"
+  },
+  "willitrunai": {
+   "label": "حافظهٔ لازم gpt-oss-20b: willitrunai",
+   "url": "https://willitrunai.com/models/gpt-oss-20b"
+  }
+ }
+}
