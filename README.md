@@ -12,11 +12,16 @@ A captured run (simulator backend, recorded with an earlier model; the copilot n
 - **SRE:** reads logs, events and CPU/RAM trends against plan limits, plus live probes. It ranks causes with evidence, applies the smallest safe fix, then verifies before and after.
 - **Code fixes:** when the cause is in the code (a memory leak, a bug behind the errors), it finds the file and line, shows the exact edit as a red/green diff, and only if the user approves patches the code, ships a new release and verifies it. If the user says no, it writes a precise task for their coding agent instead.
 - **Safety:** read-only tools run on their own; every change goes through an approval card enforced in code. There are no delete tools, prompt injection in logs is detected, and a kill switch is one click away. See [SECURITY.md](SECURITY.md).
+- **Standing rules for repetitive operations:** "whenever RAM passes 85%, restart and tell me, at most once an hour". The user approves the rule once on a card. From then on the health watcher runs it on its own within the hourly limit, reports each run in the chat with the measured result, and logs it. Only notify, investigate and restart can be automated; plan changes, rollbacks and code fixes always need their own card.
 - **Cost and model choice:** the model cost of every turn is shown in the header and written to the audit log. The four demo tasks were measured with six execution paths, from the current model to open-weight ones and a no-model rule mode. The results are on the in-app page "مسیرهای اجرا" (`/paths.html`), along with a monthly cost calculator for Liara and an estimate for self-hosting.
 
-| Incident: memory leak found in code, handed to the coding agent, verified | Prompt injection hidden in a visitor review, flagged and ignored |
+| Memory leak: the exact code edit (red/green) waits for approval, then ships and is verified | A standing rule restarted the app on its own when RAM passed the limit, then held back at its hourly cap |
 |---|---|
-| ![leak](assets/ui-leak.jpg) | ![injection](assets/ui-injection.jpg) |
+| ![leak](assets/ui-leak.jpg) | ![rule](assets/ui-rule.jpg) |
+
+| Prompt injection hidden in a visitor review, flagged and ignored |
+|---|
+| ![injection](assets/ui-injection.jpg) |
 
 ## Install
 
@@ -111,6 +116,7 @@ flowchart LR
 | ریسک کم | روشن کردن سرویس | کارت تأیید |
 | ریسک متوسط | ساخت سرویس و دیپلوی اول، انتشار نسخهٔ جدید، اصلاح کد و انتشار، تغییر متغیر محیطی، ری‌استارت، برگشت به ریلیز قبلی، افزودن دامنه | کارت تأیید با جدول «الان / بعد از تأیید»، هزینه، قطعی احتمالی و راه بازگشت؛ برای اصلاح کد، خودِ تغییر خط‌به‌خط |
 | ریسک زیاد | تغییر پلن، خاموش کردن سرویس | کارت قرمز با تیک «می‌دانم این کار هزینه یا قطعی دارد» |
+| قانون خودکار | خبر دادن، عیب‌یابی و ری‌استارت وقتی شرط قانون برقرار شد | خود قانون یک بار کارت تأیید دارد؛ بعد ناظر سلامت با سقف ساعتی اجرا می‌کند، در گفتگو خبر می‌دهد و ثبت می‌کند. تغییر پلن، برگشت و اصلاح کد هیچ‌وقت خودکار نمی‌شوند |
 | غیرممکن | حذف اپ، دیتابیس، دیسک | اصلاً ابزاری برایش وجود ندارد؛ کاربر از کنسول انجام می‌دهد |
 
 نکته‌های دیگر:
@@ -196,6 +202,8 @@ src/
   diagnose.js        موتور عیب‌یابی و بررسی نتیجه
   probe.js           تست زندهٔ HTTP
   watcher.js         ناظر سلامت
+  rules.js           قانون‌های خودکار: شرط، کار مجاز، سقف ساعتی
+  ruleRunner.js      اجرای قانون‌ها از ناظر سلامت، با توقف اضطراری و محدودهٔ اپ‌ها
   scope.js           محدودهٔ اپ‌های قابل تغییر
   safety.js          توقف اضطراری، پاک کردن رازها، تشخیص تزریق دستور
   audit.js, redact.js  گزارش اقدامات و ماسک کردن رازها
