@@ -144,23 +144,55 @@ async function settledProbe(liara, app, paths = ['/']) {
   return httpCheck(liara.appUrl(app), { paths, samples: 3 });
 }
 
+// Liara reports READY while the old container can keep answering for a while (over a minute
+// on 1405-07-30). Pages that only the new version has tell the two apart: while they answer
+// 404, visitors still get the old version. Two clean rounds in a row count as switched.
+async function waitForNewVersion(liara, app, routes, step, timeoutMs = 150000) {
+  if (!routes.length) return null;
+  const t0 = Date.now();
+  const waited = () => Math.round((Date.now() - t0) / 1000);
+  let streak = 0;
+  while (Date.now() - t0 < timeoutMs) {
+    const p = await httpCheck(liara.appUrl(app), { paths: routes, samples: 2, timeoutMs: 6000 });
+    const served = p.paths.every((x) => !x.codes['404'] && x.failures < x.samples);
+    streak = served ? streak + 1 : 0;
+    if (streak >= 2) {
+      step({ step: 'switch', status: 'done', detail: `نسخهٔ جدید جواب می‌دهد (${routes.join('، ')})` });
+      return { routes, confirmed: true, waitedSec: waited() };
+    }
+    step({ step: 'switch', status: 'running', detail: served ? 'نسخهٔ جدید جواب داد؛ یک بار دیگر بررسی می‌شود' : `منتظر جابه‌جایی؛ لیارا هنوز نسخهٔ قبلی را نشان می‌دهد (${fa(waited())} ثانیه)` });
+    await new Promise((r) => setTimeout(r, 3000));
+  }
+  const noteFa = 'جابه‌جایی به نسخهٔ جدید در این مدت تأیید نشد؛ ممکن است هنوز بخشی از درخواست‌ها به نسخهٔ قبلی برسد. چند دقیقهٔ دیگر دوباره بررسی کنید.';
+  step({ step: 'switch', status: 'failed', detail: noteFa });
+  return { routes, confirmed: false, waitedSec: waited(), noteFa };
+}
+
 // New release of an existing app from a local folder, then a settled health probe.
 async function publishFrom(liara, appName, dir, message, step, session) {
   const app = await liara.getApp(appName);
   const info = appInfo(appName) || {};
+  // Pages of the version that is live now, to spot the ones only the new version has.
+  let prevRoutes = info.routes || null;
+  if (!prevRoutes && info.dir && fs.existsSync(info.dir)) {
+    try { prevRoutes = (await analyzeProject(info.dir)).routes; } catch { /* unknown */ }
+  }
   const rel = await deployRelease(liara, { app: appName, dir, port: info.port || 3000, platform: app.platform, message }, step);
   recordDeploy(appName, rel.releaseID, dir);
   let routes = null;
   try { routes = (await analyzeProject(dir)).routes; } catch { /* keep old watch paths */ }
-  registerApp(appName, { dir: path.resolve(dir), ...(routes ? { watchPaths: watchPathsFrom(routes) } : {}) });
+  registerApp(appName, { dir: path.resolve(dir), ...(routes ? { watchPaths: watchPathsFrom(routes), routes } : {}) });
   let probe = null;
+  let switchover = null;
   if (rel.state === 'READY') {
+    const added = routes && prevRoutes ? routes.filter((r) => !prevRoutes.includes(r) && r !== '/health').slice(0, 3) : [];
+    switchover = await waitForNewVersion(liara, appName, added, step);
     probe = await settledProbe(liara, appName);
     step({ step: 'probe', status: probe.ok === probe.total ? 'done' : 'failed', detail: `${fa(probe.ok)} از ${fa(probe.total)} درخواست موفق` });
   }
   session.currentApp = appName;
   session.lastDeployAt = Date.now();
-  return { ok: rel.state === 'READY', url: liara.appUrl(appName), releaseState: rel.state, failReason: rel.failReason, buildTail: rel.buildTail.slice(-10), probe };
+  return { ok: rel.state === 'READY', url: liara.appUrl(appName), releaseState: rel.state, failReason: rel.failReason, buildTail: rel.buildTail.slice(-10), probe, ...(switchover ? { switchover } : {}) };
 }
 
 export const tools = [
@@ -309,8 +341,8 @@ export const tools = [
     // The card draws the raw probe; the model only needs the verdict and the before/after numbers.
     forModel: ({ probe, ...rest }) => rest,
     parameters: { type: 'object', properties: { app: { type: 'string' }, incidentId: { type: 'string' } }, required: ['app'] },
-    async run({ app, incidentId }, { liara, session }) {
-      return verifyRecovery(liara, app, incidentId || session.lastIncident?.id, { sinceMs: session.lastFixAt });
+    async run({ app, incidentId }, { liara, session, step }) {
+      return verifyRecovery(liara, app, incidentId || session.lastIncident?.id, { sinceMs: session.lastFixAt, onStep: step });
     },
   },
   {
@@ -478,7 +510,7 @@ export const tools = [
       step({ step: 'network', status: 'done', detail: nets[0]?.name || '-' });
       step({ step: 'create', status: 'running', detail: `ساخت ${a.name}` });
       await liara.createApp({ name: a.name, platform: a.platform, planID: a.planID, bundlePlanID: a.bundlePlanID || 'basic', network: nets[0]?.id });
-      registerApp(a.name, { managed: true, dir: path.resolve(dir), platform: a.platform, port: a.port, watchPaths: watchPathsFrom(session.project?.routes) });
+      registerApp(a.name, { managed: true, dir: path.resolve(dir), platform: a.platform, port: a.port, watchPaths: watchPathsFrom(session.project?.routes), routes: session.project?.routes || null });
       step({ step: 'create', status: 'done', detail: 'اپ ساخته شد' });
       const envs = mergeInputs(a.env_vars, inputs);
       if (envs.length) {
@@ -522,7 +554,7 @@ export const tools = [
           { kind: 'downtime', text: app.zeroDowntime ? 'استقرار بدون قطعی فعال است.' : 'استقرار بدون قطعی خاموش است؛ چند ثانیه قطعی هنگام جابه‌جایی نسخه.' },
           { kind: 'reversible', text: 'قابل بازگشت: نسخهٔ قبلی نگه داشته می‌شود و با «برگشت به ریلیز قبلی» برمی‌گردد.' },
         ],
-        steps: ['فشرده‌سازی و آپلود سورس', 'بیلد', 'استقرار و بررسی سلامت', 'تست زنده'],
+        steps: ['فشرده‌سازی و آپلود سورس', 'بیلد', 'استقرار و بررسی سلامت', 'صبر تا لیارا به نسخهٔ جدید جابه‌جا شود', 'تست زنده'],
         blocked: dir ? null : { reasonFa: 'مسیر سورس نسخهٔ جدید مشخص نیست.' },
         reasonFa: a.reason,
       };

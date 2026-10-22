@@ -214,7 +214,7 @@
     }
     let li = a.stepEls.get(ev.step);
     const ico = ev.status === 'done' ? h('span', { class: 'ok-ico' }, '✓') : ev.status === 'failed' ? h('span', { class: 'bad-ico' }, '✗') : h('span', { class: 'spin' });
-    const STEP_FA = { balance: 'موجودی', network: 'شبکهٔ خصوصی', create: 'ساخت اپ', envs: 'متغیرها', archive: 'فشرده‌سازی', upload: 'آپلود', release: 'ریلیز', build: 'بیلد و استقرار', probe: 'تست زنده', wait: 'بالا آمدن اپ', restart: 'ری‌استارت', resize: 'تغییر پلن', scale: 'روشن/خاموش' };
+    const STEP_FA = { balance: 'موجودی', network: 'شبکهٔ خصوصی', create: 'ساخت اپ', envs: 'متغیرها', archive: 'فشرده‌سازی', upload: 'آپلود', release: 'ریلیز', build: 'بیلد و استقرار', probe: 'تست زنده', wait: 'بالا آمدن اپ', restart: 'ری‌استارت', resize: 'تغییر پلن', scale: 'روشن/خاموش', switch: 'جابه‌جایی نسخه' };
     const content = [ico, h('span', {}, STEP_FA[ev.step] || ev.step), h('span', { class: 'd' }, ev.detail || '')];
     if (!li) {
       li = h('li', {}, ...content);

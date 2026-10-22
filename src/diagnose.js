@@ -331,13 +331,19 @@ export function latestIncident(app) {
   return [...incidents.values()].filter((i) => i.app === app).sort((a, b) => b.at - a.at)[0];
 }
 
-export async function verifyRecovery(liara, appName, incidentId, { sinceMs } = {}) {
+// After a restart or release Liara keeps the previous container in rotation for a while:
+// about 50 s on 1405-07-30, while the new one already answered every probe. A fix is judged
+// once the old container's errors have stopped (no new error line for QUIET_MS), or after
+// SWITCH_MAX_MS, when errors still coming in are real.
+const QUIET_MS = 20000;
+const SWITCH_MAX_MS = 120000;
+
+export async function verifyRecovery(liara, appName, incidentId, { sinceMs, onStep } = {}) {
   const inc = (incidentId && incidents.get(incidentId)) || latestIncident(appName);
   const paths = inc?.paths || ['/'];
   const fromMs = sinceMs || Date.now() - 120000;
   const fromSec = Math.floor(fromMs / 1000);
-  // Right after a restart Liara can still route some requests to the old container, so
-  // probe in rounds until one round is fully healthy (or about 45 s pass), and judge that.
+  // Probe in rounds until two rounds in a row are fully healthy (or about 90 s pass).
   const rounds = [];
   let probe;
   let settledAt = null;
@@ -346,24 +352,40 @@ export async function verifyRecovery(liara, appName, incidentId, { sinceMs } = {
     const roundStart = Date.now();
     probe = await httpCheck(liara.appUrl(appName), { paths, samples: 4 });
     rounds.push({ ok: probe.ok, total: probe.total, at: roundStart });
-    // Two healthy rounds in a row: the old container is out of rotation.
     const prev = rounds.at(-2);
     if (probe.ok === probe.total && prev && prev.ok === prev.total) { settledAt = prev.at; break; }
-    if (Date.now() - t0 > 50000) {
+    if (Date.now() - t0 > 90000) {
       if (probe.ok === probe.total) settledAt = roundStart;
       break;
     }
+    onStep?.({ step: 'switch', status: 'running', detail: 'صبر تا همهٔ درخواست‌ها به نسخهٔ جدید برسد' });
     await new Promise((r) => setTimeout(r, probe.ok === probe.total ? 3000 : 6000));
   }
-  const [logs, mem] = await Promise.all([
-    settle(liara.logs(appName, { startSec: fromSec, limit: 400 })),
-    settle(liara.metricsSummary(appName)),
-  ]);
-  const countFrom = settledAt || fromMs;
   const isErr = (l) => ERROR_RE.test(l.line) && !/\b(GET|POST)\s+\S+\s+[23]\d\d\b/.test(l.line);
-  const errorsAfter = logs.ok ? logs.v.filter((l) => (l.t || 0) >= countFrom && isErr(l)).length : null;
-  const errorsDuringSwitch = logs.ok && settledAt ? logs.v.filter((l) => (l.t || 0) >= fromMs && (l.t || 0) < settledAt && isErr(l)).length : 0;
+  let logs;
+  let switchEnd = settledAt || fromMs;
+  const tWatch = Date.now();
+  for (;;) {
+    logs = await settle(liara.logs(appName, { startSec: fromSec, limit: 400 }));
+    if (!logs.ok) break;
+    const lastErr = Math.max(0, ...logs.v.filter((l) => (l.t || 0) >= fromMs && isErr(l)).map((l) => l.t || 0));
+    if (!lastErr || Date.now() - lastErr >= QUIET_MS) {
+      if (lastErr >= switchEnd) switchEnd = lastErr + 1;
+      break;
+    }
+    if (Date.now() - tWatch >= SWITCH_MAX_MS) {
+      switchEnd = Date.now() - QUIET_MS;
+      break;
+    }
+    onStep?.({ step: 'switch', status: 'running', detail: 'خطاهای کانتینر قبلی هنوز در لاگ می‌آید؛ صبر تا جابه‌جایی تمام شود' });
+    await new Promise((r) => setTimeout(r, 8000));
+  }
+  if (switchEnd > fromMs + 1000) onStep?.({ step: 'switch', status: 'done', detail: `جابه‌جایی حدود ${n((switchEnd - fromMs) / 1000)} ثانیه طول کشید` });
+  const mem = await settle(liara.metricsSummary(appName));
+  const errorsAfter = logs.ok ? logs.v.filter((l) => (l.t || 0) >= switchEnd && isErr(l)).length : null;
+  const errorsDuringSwitch = logs.ok ? logs.v.filter((l) => (l.t || 0) >= fromMs && (l.t || 0) < switchEnd && isErr(l)).length : 0;
   const transientFailures = rounds.slice(0, -1).reduce((a, r) => a + (r.total - r.ok), 0);
+  const switchSec = Math.round((switchEnd - fromMs) / 1000);
   const memNow = mem.ok && mem.v.memoryBytes ? Math.round(mem.v.memoryBytes / MB) : null;
   const before = inc?.baseline || {};
   const okBefore = before.probe?.total ? Math.round((before.probe.ok / before.probe.total) * 100) : null;
@@ -378,7 +400,7 @@ export async function verifyRecovery(liara, appName, incidentId, { sinceMs } = {
     verdictFa: { recovered: 'مشکل برطرف شد', improved: 'بهتر شده ولی کامل نه', not_recovered: 'هنوز برطرف نشده' }[verdict],
     before: inc ? { successPct: okBefore, p50ms: before.probe?.p50ms ?? null, errorsInLogs: before.errors, memoryMB: before.memory?.lastMB ?? null } : null,
     after: { successPct: okAfter, p50ms: probe.p50ms, errorsInLogsSinceFix: errorsAfter, memoryMB: memNow },
-    switchover: transientFailures || errorsDuringSwitch ? { failedProbes: transientFailures, errorLines: errorsDuringSwitch, noteFa: 'چند درخواست در چند ثانیهٔ جابه‌جایی کانتینر قدیم و جدید خطا گرفت؛ بعد از آن همه سالم بودند.' } : null,
+    switchover: transientFailures || errorsDuringSwitch ? { failedProbes: transientFailures, errorLines: errorsDuringSwitch, seconds: switchSec, noteFa: `تا حدود ${n(switchSec)} ثانیه بعد از اصلاح، بخشی از درخواست‌ها هنوز به کانتینر قبلی می‌رسید و خطا می‌گرفت؛ این خطاها جدا شمرده شد.` } : null,
     probe,
   };
 }
