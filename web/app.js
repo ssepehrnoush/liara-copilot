@@ -21,7 +21,7 @@
   const ICONS = {
     get_account_overview: '💳', list_plans: '📋', analyze_project: '🔍', get_app_status: '📊', get_logs: '📜', get_metrics: '📈', http_check: '🌐',
     investigate_incident: '🩺', verify_recovery: '✅', search_project_code: '🔎', read_project_file: '📄', handoff_to_coding_agent: '🤝', get_domain_guide: '🌍',
-    deploy_new_app: '🚀', deploy_new_version: '📦', set_env_vars: '🔑', restart_app: '🔄', rollback_release: '↩️', change_plan: '⚙️', stop_app: '⏹️', start_app: '▶️', add_domain: '🌍',
+    deploy_new_app: '🚀', deploy_new_version: '📦', fix_code: '🛠️', set_env_vars: '🔑', restart_app: '🔄', rollback_release: '↩️', change_plan: '⚙️', stop_app: '⏹️', start_app: '▶️', add_domain: '🌍',
   };
   const IMPACT_ICON = { cost: '💰', downtime: '⏱️', restart: '🔄', reversible: '↩️', security: '🔒', note: 'ℹ️' };
 
@@ -228,7 +228,7 @@
       const card = renderToolCard(ev.ui, ev.data);
       if (card) add(card);
     }
-    if (!ev.error && a.tool && !['deploy_new_app', 'deploy_new_version'].includes(a.tool)) setTimeout(() => a.el.classList.remove('open'), 1500);
+    if (!ev.error && a.tool && !['deploy_new_app', 'deploy_new_version', 'fix_code'].includes(a.tool)) setTimeout(() => a.el.classList.remove('open'), 1500);
   }
 
   // ------------------------------------------------------------ tool cards
@@ -320,11 +320,14 @@
       return h('div', { class: 'card' }, h('h4', {}, '⚠️ انتشار کامل نشد'),
         d.error === 'insufficient_balance' ? h('div', { class: 'blocked' }, `موجودی ${toman(d.balanceToman)} است؛ برای هر ساعت ${toman(d.needPerHourToman)} لازم است.`) : null,
         d.failReason ? h('div', { class: 'blocked' }, d.failReason) : null,
+        d.error && d.error !== 'insufficient_balance' ? h('div', { class: 'blocked' }, d.error) : null,
+        d.note ? h('div', { class: 'small-muted' }, d.note) : null,
         d.buildTail?.length ? h('div', { class: 'buildlog' }, d.buildTail.join('\n')) : null);
     }
     const p = d.probe;
     return h('div', { class: 'card' },
-      h('h4', {}, '🎉 سایت زنده است'),
+      h('h4', {}, d.files ? '🛠️ کد اصلاح و منتشر شد' : '🎉 سایت زنده است'),
+      d.files ? h('div', { class: 'small-muted' }, `${faNum(d.changedLines)} خط در ${d.files.join('، ')} عوض شد؛ پشتیبان فایل‌های اصلی نگه داشته شد.`) : null,
       d.url ? h('div', {}, h('a', { href: d.url, target: '_blank', rel: 'noopener', style: 'direction:ltr;font-weight:700' }, d.url)) : null,
       p ? h('div', { class: 'small-muted' }, `تست زنده: ${faNum(p.ok)} از ${faNum(p.total)} درخواست موفق، زمان پاسخ میانه ${faNum(p.p50ms)} میلی‌ثانیه`) : null,
       d.envsSet?.length ? h('div', { class: 'small-muted' }, `متغیرهای ثبت‌شده: ${d.envsSet.join('، ')} (مقادیر مخفی)`) : null,
@@ -367,6 +370,9 @@
       c.changes?.length ? h('table', { class: 'changes' },
         h('tr', {}, h('th', {}, 'چه چیزی'), h('th', {}, 'الان'), h('th', {}, 'بعد از تأیید')),
         c.changes.map((x) => h('tr', {}, h('td', {}, x.label), h('td', { class: x.before ? 'before' : '' }, x.before || '-'), h('td', {}, x.after || '-')))) : null,
+      c.diff?.length ? h('div', { class: 'diff' }, c.diff.map((d) => h('div', { class: 'hunk' },
+        h('div', { class: 'hunk-h' }, `${d.file}:${d.line}`),
+        h('pre', {}, d.before.map((l) => h('span', { class: 'del' }, `- ${l}`)), d.after.map((l) => h('span', { class: 'add' }, `+ ${l}`)))))) : null,
       c.impacts?.length ? h('ul', { class: 'impacts' }, c.impacts.map((x) => h('li', {}, `${IMPACT_ICON[x.kind] || '•'} ${x.text}`))) : null,
       c.steps?.length ? h('details', {}, h('summary', { class: 'small-muted' }, 'مراحل اجرا'), h('ol', { class: 'ordered' }, c.steps.map((s) => h('li', {}, s)))) : null,
       inputEls.length ? h('div', { class: 'inputs' }, inputEls) : null,

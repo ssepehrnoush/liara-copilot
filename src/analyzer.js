@@ -13,7 +13,7 @@ export const DEFAULT_IGNORES = [
   'dist', 'build', 'coverage', '*.log', 'LIARA_COPILOT_TASK.md',
 ];
 
-const SOURCE_EXT = /\.(m?js|cjs|ts|tsx|jsx|py|php|go|cs|rb|vue|svelte|json|ya?ml|toml|env\.example)$/i;
+export const SOURCE_EXT = /\.(m?js|cjs|ts|tsx|jsx|py|php|go|cs|rb|vue|svelte|json|ya?ml|toml|env\.example)$/i;
 const IGNORED_ENV = new Set(['PORT', 'NODE_ENV', 'HOME', 'PATH', 'PWD', 'HOSTNAME', 'TZ', 'CI', 'npm_package_version']);
 
 export function makeIgnore(dir) {

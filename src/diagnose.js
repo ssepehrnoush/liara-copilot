@@ -254,8 +254,8 @@ function rankHypotheses(ev, { latest, prevReady, containerStart }) {
         ...(ev.logs?.growingCounters || []).map((c) => `در لاگ برنامه، شمارندهٔ ${c.key} از ${n(c.first)} به ${n(c.last)} رسیده و پایین نیامده.`),
         cpuHot && leak ? 'CPU هم به سقف رسیده؛ کدی که روی این دادهٔ رو به رشد کار می‌کند هر بار سنگین‌تر می‌شود، پس کمبود CPU نتیجهٔ همین مشکل است.' : null,
       ].filter(Boolean),
-      fix: { tool: 'restart_app', fa: 'ری‌استارت برای خالی شدن رم (راه‌حل موقت، چند ثانیه قطعی)' },
-      altFix: leak ? { tool: 'handoff_to_coding_agent', fa: 'پیدا کردن محل نشت در کد و فرستادن اصلاحیه برای ایجنت کدنویس' } : { tool: 'change_plan', fa: 'ارتقای پلن به رم بیشتر (هزینه دارد)' },
+      fix: leak ? { tool: 'fix_code', fa: 'پیدا کردن محل نشت در کد و اصلاحش با تأیید شما (اگر نخواهید، اصلاحیه برای ایجنت کدنویس)' } : { tool: 'restart_app', fa: 'ری‌استارت برای خالی شدن رم (راه‌حل موقت، چند ثانیه قطعی)' },
+      altFix: leak ? { tool: 'restart_app', fa: 'ری‌استارت برای خالی شدن رم (فقط راه‌حل موقت تا اصلاح کد)' } : { tool: 'change_plan', fa: 'ارتقای پلن به رم بیشتر (هزینه دارد)' },
     });
   }
 
@@ -267,7 +267,7 @@ function rankHypotheses(ev, { latest, prevReady, containerStart }) {
       title: fromLeak ? 'پردازنده به سقف پلن رسیده (نشانهٔ همان نشت)' : 'پردازنده به سقف پلن رسیده',
       confidence: (cpu.avgPctOfPlan >= 70 ? 0.75 : 0.5) - (fromLeak ? 0.2 : 0),
       evidence: [`مصرف CPU به ${n(cpu.maxPctOfPlan)}٪ سهم پلن رسیده (میانگین ${n(cpu.avgPctOfPlan)}٪).`, slow ? `کندی (${slowFa}) با اشباع CPU هم‌خوان است.` : null, fromLeak ? 'چون رم هم خطی بالا می‌رود، ارتقای پلن فقط مشکل را عقب می‌اندازد.' : null].filter(Boolean),
-      fix: { tool: fromLeak ? 'handoff_to_coding_agent' : 'change_plan', fa: fromLeak ? 'اصلاح کد مسبب نشت' : 'ارتقای پلن یا بهینه‌سازی کد پرمصرف' },
+      fix: { tool: fromLeak ? 'fix_code' : 'change_plan', fa: fromLeak ? 'اصلاح کد مسبب نشت' : 'ارتقای پلن یا بهینه‌سازی کد پرمصرف' },
     });
   }
 
@@ -286,10 +286,10 @@ function rankHypotheses(ev, { latest, prevReady, containerStart }) {
       title: 'باگ در آخرین نسخهٔ منتشرشده',
       confidence: 0.6,
       evidence: [`${n(err5xx)} از ${n(total)} درخواست تست خطای 5xx گرفت.`, `اولین خطا ${new Date(firstErr).toLocaleTimeString('fa-IR')} بعد از انتشار ریلیز ${latest.tag || ''} ثبت شده.`, ev.logs.topErrors[0] ? `خطای غالب: «${ev.logs.topErrors[0].sample.slice(0, 140)}»` : null].filter(Boolean),
-      fix: prevReady?.sourceAvailable ? { tool: 'rollback_release', args: { releaseID: prevReady.id }, fa: 'برگشت به ریلیز سالم قبلی' } : { tool: 'handoff_to_coding_agent', fa: 'ارسال گزارش خطا به ایجنت کدنویس' },
+      fix: prevReady?.sourceAvailable ? { tool: 'rollback_release', args: { releaseID: prevReady.id }, fa: 'برگشت به ریلیز سالم قبلی' } : { tool: 'fix_code', fa: 'پیدا کردن باگ در کد و اصلاحش با تأیید شما، یا گزارش برای ایجنت کدنویس' },
     });
   } else if (err5xx && !H.length) {
-    H.push({ id: 'app_error', title: 'خطای داخلی برنامه', confidence: 0.55, evidence: [`${n(err5xx)} از ${n(total)} درخواست خطای 5xx گرفت.`, ev.logs?.topErrors?.[0] ? `خطای غالب در لاگ: «${ev.logs.topErrors[0].sample.slice(0, 140)}»` : 'در بازهٔ لاگ خطای مشخصی پیدا نشد.'], fix: { tool: 'handoff_to_coding_agent', fa: 'ارسال جزئیات خطا به ایجنت کدنویس' } });
+    H.push({ id: 'app_error', title: 'خطای داخلی برنامه', confidence: 0.55, evidence: [`${n(err5xx)} از ${n(total)} درخواست خطای 5xx گرفت.`, ev.logs?.topErrors?.[0] ? `خطای غالب در لاگ: «${ev.logs.topErrors[0].sample.slice(0, 140)}»` : 'در بازهٔ لاگ خطای مشخصی پیدا نشد.'], fix: { tool: 'fix_code', fa: 'پیدا کردن باگ در کد و اصلاحش با تأیید شما، یا گزارش برای ایجنت کدنویس' } });
   }
 
   // Unbounded data growth: a counter in the app's own logs keeps climbing while every request

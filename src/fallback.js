@@ -122,6 +122,27 @@ async function findLeak(app, { runToolByName }) {
   return null;
 }
 
+// Without a model the copilot can still make one safe, generic fix: cap the growing
+// collection right before the line that adds to it.
+const CAP = 100;
+async function capFix(app, leak, { runToolByName }) {
+  const read = await runToolByName('read_project_file', { app, file: leak.grows.file, fromLine: leak.grows.line, toLine: leak.grows.line });
+  const line = read.text?.replace(/^\d+: /, '');
+  if (!line || !line.includes(`${leak.name}.`)) return null;
+  const indent = line.match(/^\s*/)[0];
+  const n = leak.name;
+  const cap = /new Map\(\)/.test(leak.declared.text) ? `if (${n}.size >= ${CAP}) ${n}.delete(${n}.keys().next().value);`
+    : /\[\]/.test(leak.declared.text) ? `if (${n}.length >= ${CAP}) ${n}.splice(0, ${n}.length - ${CAP - 1});`
+    : null;
+  if (!cap) return null;
+  return {
+    app,
+    title: `${n} فقط ${fa(CAP)} مورد آخر را نگه می‌دارد`,
+    edits: [{ file: leak.grows.file, find: line, replace: `${indent}${cap}\n${line}` }],
+    reason: `${n} با هر بازدید بزرگ‌تر می‌شود و هیچ‌وقت خالی نمی‌شود؛ با سقف ثابت، رم دیگر بالا نمی‌رود.`,
+  };
+}
+
 async function incident(session, app, text, paths, { runToolByName, say }) {
   const r = await runToolByName('investigate_incident', { app, symptom: text, paths });
   if (r.error) return say(`نتوانستم اطلاعات ${app} را از لیارا بخوانم: ${r.error}`);
@@ -150,6 +171,16 @@ async function incident(session, app, text, paths, { runToolByName, say }) {
     const leak = await findLeak(app, { runToolByName });
     if (leak) {
       await say(`در کد هم دنبال علت گشتم: آرایهٔ \`${leak.name}\` در \`${leak.declared.file}:${leak.declared.line}\` تعریف شده و در \`${leak.grows.file}:${leak.grows.line}\` با هر بازدید بزرگ‌تر می‌شود ولی هیچ‌جا خالی نمی‌شود. یعنی نشت حافظه در کد است و ارتقای پلن فقط مشکل را عقب می‌اندازد.`);
+      const fix = await capFix(app, leak, { runToolByName });
+      if (fix) {
+        await say(`پیشنهاد اصلاح: \`${leak.name}\` فقط ${fa(CAP)} مورد آخر را نگه دارد. کد را عوض می‌کنم و نسخهٔ جدید را منتشر می‌کنم؛ تغییر را در کارت ببینید.`);
+        const res = await runToolByName('fix_code', fix);
+        if (res.approvedByUser && res.ok) {
+          await new Promise((r) => setTimeout(r, 5000));
+          return verify(session, app, { runToolByName, say });
+        }
+        if (res.status !== 'rejected_by_user') await say(`اصلاح خودکار انجام نشد${res.error ? `: ${res.error}` : ''}. اصلاحیه را برای ایجنت کدنویس می‌نویسم.`);
+      }
       await runToolByName('handoff_to_coding_agent', {
         app,
         title: `Memory leak: \`${leak.name}\` grows on every request`,

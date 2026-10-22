@@ -10,6 +10,7 @@ import { httpCheck } from '../probe.js';
 import { collectEvidence, verifyRecovery } from '../diagnose.js';
 import { maskEnvs, isSecretKey } from '../redact.js';
 import { registerApp, appInfo, canModify } from '../scope.js';
+import { LIMITS, planEdits, applyPlan, restore, syntaxError } from '../codefix.js';
 
 const MB = 1024 * 1024;
 const fa = (n) => (n === null || n === undefined ? '-' : Number(n).toLocaleString('fa-IR', { maximumFractionDigits: 1 }));
@@ -123,6 +124,25 @@ async function settledProbe(liara, app, paths = ['/']) {
     await new Promise((r) => setTimeout(r, 3000));
   } while (Date.now() - t0 < 60000);
   return httpCheck(liara.appUrl(app), { paths, samples: 3 });
+}
+
+// New release of an existing app from a local folder, then a settled health probe.
+async function publishFrom(liara, appName, dir, message, step, session) {
+  const app = await liara.getApp(appName);
+  const info = appInfo(appName) || {};
+  const rel = await deployRelease(liara, { app: appName, dir, port: info.port || 3000, platform: app.platform, message }, step);
+  recordDeploy(appName, rel.releaseID, dir);
+  let routes = null;
+  try { routes = (await analyzeProject(dir)).routes; } catch { /* keep old watch paths */ }
+  registerApp(appName, { dir: path.resolve(dir), ...(routes ? { watchPaths: watchPathsFrom(routes) } : {}) });
+  let probe = null;
+  if (rel.state === 'READY') {
+    probe = await settledProbe(liara, appName);
+    step({ step: 'probe', status: probe.ok === probe.total ? 'done' : 'failed', detail: `${fa(probe.ok)} از ${fa(probe.total)} درخواست موفق` });
+  }
+  session.currentApp = appName;
+  session.lastDeployAt = Date.now();
+  return { ok: rel.state === 'READY', url: liara.appUrl(appName), releaseState: rel.state, failReason: rel.failReason, buildTail: rel.buildTail.slice(-10), probe };
 }
 
 export const tools = [
@@ -468,22 +488,90 @@ export const tools = [
     },
     async run(a, { liara, step, session }) {
       requireScope(a.app);
-      const app = await liara.getApp(a.app);
       const dir = /^https?:\/\/(www\.)?github\.com\//i.test(a.source || '') ? await fetchGithub(a.source) : projectDir(a.app, a.source);
-      const info = appInfo(a.app) || {};
-      const rel = await deployRelease(liara, { app: a.app, dir, port: info.port || 3000, platform: app.platform, message: a.message || 'New version by Liara Copilot' }, step);
-      recordDeploy(a.app, rel.releaseID, dir);
-      let routes = null;
-      try { routes = (await analyzeProject(dir)).routes; } catch { /* keep old watch paths */ }
-      registerApp(a.app, { dir: path.resolve(dir), ...(routes ? { watchPaths: watchPathsFrom(routes) } : {}) });
-      let probe = null;
-      if (rel.state === 'READY') {
-        probe = await settledProbe(liara, a.app);
-        step({ step: 'probe', status: probe.ok === probe.total ? 'done' : 'failed', detail: `${fa(probe.ok)} از ${fa(probe.total)} درخواست موفق` });
+      return publishFrom(liara, a.app, dir, a.message || 'New version by Liara Copilot', step, session);
+    },
+  },
+  {
+    name: 'fix_code',
+    labelFa: 'اصلاح کد و انتشار',
+    risk: 'medium',
+    ui: 'deploy',
+    description: `Fix the root cause in the project's own code, then publish it as a new version and probe the site. Each edit replaces one exact snippet (copied from read_project_file, without the line-number prefixes) that appears exactly once in the file. Keep it minimal: at most ${LIMITS.files} files, ${LIMITS.edits} edits, ${LIMITS.changedLines} changed lines; never .env or config secrets. The user sees the diff before anything is written; originals are backed up and restored if the syntax check or the build fails.`,
+    parameters: {
+      type: 'object',
+      properties: {
+        app: { type: 'string' },
+        title: { type: 'string', description: 'One short Persian line: what the fix does' },
+        edits: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              file: { type: 'string', description: 'Path relative to the project folder' },
+              find: { type: 'string', description: 'Exact current code to replace (unique in the file)' },
+              replace: { type: 'string', description: 'New code' },
+            },
+            required: ['file', 'find', 'replace'],
+          },
+        },
+        reason: { type: 'string' },
+      },
+      required: ['app', 'title', 'edits'],
+    },
+    async preview(a, { liara }) {
+      requireScope(a.app);
+      const dir = projectDir(a.app);
+      if (!dir) throw new Error('پوشهٔ سورس این اپ را ندارم؛ مسیر پروژه را بدهید یا اصلاح را به ایجنت کدنویس بسپارید.');
+      const plan = planEdits(dir, a.edits);
+      const rel = await liara.listReleases(a.app, 1).catch(() => ({ releases: [] }));
+      const app = await liara.getApp(a.app);
+      return {
+        titleFa: 'اصلاح کد و انتشار نسخهٔ جدید',
+        summaryFa: `${a.title}. ${fa(plan.changedLines)} خط در ${plan.files.join('، ')} عوض می‌شود و بعد نسخهٔ جدید ${a.app} منتشر می‌شود.`,
+        changes: [
+          { label: 'فایل‌ها', after: plan.files.join('، ') },
+          { label: 'نسخه', before: rel.releases[0]?.tag || '-', after: 'نسخهٔ جدید با کد اصلاح‌شده' },
+        ],
+        diff: plan.diff,
+        impacts: [
+          { kind: 'reversible', text: 'از فایل‌های اصلی پشتیبان گرفته می‌شود. اگر بررسی سینتکس یا بیلد خطا بدهد، همان‌ها برمی‌گردند و نسخهٔ فعلی روی لیارا می‌ماند. بعد از انتشار هم «برگشت به نسخهٔ قبلی» در دسترس است.' },
+          { kind: 'downtime', text: app.zeroDowntime ? 'استقرار بدون قطعی فعال است.' : 'چند ثانیه قطعی هنگام جابه‌جایی نسخه.' },
+          { kind: 'note', text: `تغییر در پوشهٔ پروژهٔ شما (${path.basename(dir)}) ذخیره می‌شود؛ بعداً در گیت هم ثبتش کنید.` },
+        ],
+        steps: ['پشتیبان‌گیری از فایل‌ها', 'اعمال تغییر', 'بررسی سینتکس', 'فشرده‌سازی و آپلود سورس', 'بیلد', 'استقرار و تست زنده'],
+        reasonFa: a.reason,
+      };
+    },
+    async run(a, { liara, step, session }) {
+      requireScope(a.app);
+      const dir = projectDir(a.app);
+      if (!dir) return { ok: false, error: 'پوشهٔ سورس این اپ در دسترس نیست.' };
+      const plan = planEdits(dir, a.edits);
+      const backup = path.join(config.dataDir, 'backups', `${a.app}-${Date.now()}`);
+      applyPlan(dir, plan, backup);
+      step({ step: 'edit', status: 'done', detail: `${fa(plan.changedLines)} خط در ${plan.files.join('، ')} (پشتیبان گرفته شد)` });
+      const bad = syntaxError(dir, plan.files);
+      if (bad) {
+        restore(dir, plan.files, backup);
+        step({ step: 'check', status: 'failed', detail: `خطای سینتکس در ${bad.file}؛ فایل‌ها برگشتند` });
+        return { ok: false, error: `کد اصلاح‌شده سینتکس درستی نداشت و فایل‌ها به حالت قبل برگشتند. ${bad.message}`, restored: true };
       }
-      session.currentApp = a.app;
-      session.lastDeployAt = Date.now();
-      return { ok: rel.state === 'READY', url: liara.appUrl(a.app), releaseState: rel.state, failReason: rel.failReason, buildTail: rel.buildTail.slice(-10), probe };
+      step({ step: 'check', status: 'done', detail: 'سینتکس درست است' });
+      let res;
+      try {
+        res = await publishFrom(liara, a.app, dir, `Code fix by Liara Copilot: ${a.title}`, step, session);
+      } catch (e) {
+        restore(dir, plan.files, backup);
+        throw e;
+      }
+      if (!res.ok) {
+        restore(dir, plan.files, backup);
+        return { ...res, restored: true, note: 'انتشار کامل نشد؛ فایل‌ها به حالت قبل برگشتند و نسخهٔ قبلی روی لیارا فعال مانده.' };
+      }
+      session.lastFixAt = Date.now();
+      registerApp(a.app, { lastFixAt: session.lastFixAt });
+      return { ...res, files: plan.files, changedLines: plan.changedLines, backup: path.relative(config.root, backup) };
     },
   },
   {
