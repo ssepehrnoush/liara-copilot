@@ -14,6 +14,7 @@ import { managedApps, canModify, appInfo } from './scope.js';
 import { startWatcher, healthSnapshot } from './watcher.js';
 import { listRules, disableRule, describeRule } from './rules.js';
 import { makeRuleRunner } from './ruleRunner.js';
+import { downsample } from './metrics.js';
 
 const MB = 1024 * 1024;
 const liara = config.liaraMode === 'sim'
@@ -152,11 +153,16 @@ app.get('/api/status', async (_req, res) => {
 });
 
 app.get('/api/apps/:name/metrics', async (req, res) => {
-  const minutes = Math.min(180, Number(req.query.minutes || 30));
+  // A day is the longest range worth asking for: Liara returns about one day even for a week.
+  const minutes = Math.min(1440, Math.max(1, Number(req.query.minutes) || 30));
   const since = Math.floor(Date.now() / 1000) - minutes * 60;
   try {
     const [mem, cpu] = await Promise.all([liara.metric(req.params.name, 'memory', since), liara.metric(req.params.name, 'cpu', since)]);
-    res.json({ memory: mem.map((p) => ({ t: p.t, mb: Math.round(p.v / MB) })), cpu: cpu.map((p) => ({ t: p.t, v: p.v })) });
+    res.json({
+      minutes,
+      memory: downsample(mem).map((p) => ({ t: p.t, mb: Math.round(p.v / MB), hiMb: Math.round(p.hi / MB) })),
+      cpu: downsample(cpu).map((p) => ({ t: p.t, v: p.v, hi: p.hi })),
+    });
   } catch (e) {
     res.status(e.status || 500).json({ error: e.fa || e.message });
   }

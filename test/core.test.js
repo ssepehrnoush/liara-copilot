@@ -16,6 +16,7 @@ import { callCost } from '../src/llm.js';
 import { SYSTEM_PROMPT, contextNote } from '../src/prompts.js';
 import { toolByName } from '../src/tools/index.js';
 import { useRulesFile, addRule, checkRule, dueRules, markFired, listRules } from '../src/rules.js';
+import { downsample } from '../src/metrics.js';
 
 const CATALOG = {
   plans: [
@@ -266,4 +267,18 @@ test('standing rules: a periodic report fires at once, then every N hours', () =
   markFired(r, t0);
   assert.equal(dueRules('shop', snap, t0 + 5 * 3600000).length, 0);
   assert.equal(dueRules('shop', snap, t0 + 6 * 3600000).length, 1);
+});
+
+test('usage history: a day of 30 s points shrinks to the chart size and keeps each peak', () => {
+  const t0 = Date.parse('2026-10-22T00:00:00Z');
+  const day = Array.from({ length: 2880 }, (_, i) => ({ t: t0 + i * 30000, v: i === 1000 ? 500 : 100 }));
+  const out = downsample(day, 150);
+  assert.equal(out.length, 150);
+  assert.equal(out[0].t, t0);
+  assert.ok(out.every((p, i) => !i || p.t > out[i - 1].t), 'time keeps moving forward');
+  const spike = out.find((p) => p.hi === 500);
+  assert.ok(spike, 'the one-point spike survives as the bucket peak');
+  assert.ok(spike.v > 100 && spike.v < 500, 'while the line shows the bucket average');
+  const short = [{ t: t0, v: 1 }, { t: t0 + 15000, v: 3 }];
+  assert.deepEqual(downsample(short), [{ t: t0, v: 1, hi: 1 }, { t: t0 + 15000, v: 3, hi: 3 }]);
 });

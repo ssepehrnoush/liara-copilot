@@ -13,6 +13,8 @@
   --warn-soft: #fff4e0;
   --bad: #d92d20;
   --bad-soft: #fdecea;
+  --ram: #0f9b8e;
+  --cpu: #6e5ce6;
   --mono: ui-monospace, "Cascadia Code", Consolas, monospace;
   --radius: 14px;
   --shadow: 0 1px 2px rgba(16, 24, 40, .06), 0 1px 3px rgba(16, 24, 40, .08);
@@ -21,13 +23,13 @@
   :root:not([data-theme="light"]) {
     --bg: #0f141b; --panel: #161c25; --panel-2: #1b2330; --line: #283241; --text: #e6ebf2; --muted: #98a2b3;
     --accent: #4c9bff; --accent-soft: #15243a; --ok: #3ccf7f; --ok-soft: #12291d; --warn: #f0a93b; --warn-soft: #2d2412;
-    --bad: #ff6b5e; --bad-soft: #321a18;
+    --bad: #ff6b5e; --bad-soft: #321a18; --ram: #2fd0bf; --cpu: #9d90ff;
   }
 }
 :root[data-theme="dark"] {
   --bg: #0f141b; --panel: #161c25; --panel-2: #1b2330; --line: #283241; --text: #e6ebf2; --muted: #98a2b3;
   --accent: #4c9bff; --accent-soft: #15243a; --ok: #3ccf7f; --ok-soft: #12291d; --warn: #f0a93b; --warn-soft: #2d2412;
-  --bad: #ff6b5e; --bad-soft: #321a18;
+  --bad: #ff6b5e; --bad-soft: #321a18; --ram: #2fd0bf; --cpu: #9d90ff;
 }
 
 * { box-sizing: border-box; }
@@ -57,7 +59,7 @@ button { font-family: inherit; font-size: inherit; cursor: pointer; }
 .card.rule { border-inline-start: 4px solid var(--accent); }
 .card.rule .rule-hyps { margin: 4px 0; padding-inline-start: 20px; font-size: 13.5px; }
 .card.rule .actions { margin-top: 6px; }
-.rules { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 14px; display: flex; flex-direction: column; gap: 8px; }
+.auto-rules { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 14px; display: flex; flex-direction: column; gap: 8px; }
 .rules-h { font-weight: 700; font-size: 14px; }
 .rule-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 13px; border-top: 1px solid var(--line); padding-top: 8px; }
 .card.security pre { font-family: var(--mono); font-size: 12px; white-space: pre-wrap; unicode-bidi: plaintext; text-align: start; background: var(--panel); border-radius: 8px; padding: 6px 8px; margin: 6px 0; }
@@ -201,12 +203,46 @@ button { font-family: inherit; font-size: inherit; cursor: pointer; }
 .dot.degraded { background: var(--warn); box-shadow: 0 0 0 3px var(--warn-soft); }
 .dot.down { background: var(--bad); box-shadow: 0 0 0 3px var(--bad-soft); animation: pulse 1.2s infinite; }
 @keyframes pulse { 50% { box-shadow: 0 0 0 6px var(--bad-soft); } }
-.metricrow { display: grid; grid-template-columns: 56px 1fr auto; gap: 8px; align-items: center; font-size: 13px; margin-top: 6px; }
-.metricrow .v { color: var(--muted); direction: ltr; font-size: 12.5px; }
-.spark { width: 100%; height: 44px; display: block; margin-top: 6px; }
-.spark path.area { fill: var(--accent-soft); }
-.spark path.line { fill: none; stroke: var(--accent); stroke-width: 1.6; }
-.spark line.limit { stroke: var(--bad); stroke-dasharray: 3 3; stroke-width: 1; }
+/* usage: gauges beside a RAM/CPU trend chart */
+.usage { display: grid; grid-template-columns: 104px minmax(0, 1fr); gap: 12px; align-items: start; margin-top: 10px; }
+.gauges { display: flex; flex-direction: column; gap: 8px; }
+.gauge { text-align: center; }
+.gauge svg { width: 104px; height: 54px; display: block; }
+.gauge .track { fill: none; stroke: var(--line); stroke-width: 9; stroke-linecap: round; }
+.gauge .val { fill: none; stroke: var(--ok); stroke-width: 9; stroke-linecap: round; transition: stroke-dasharray .6s ease; }
+.gauge.warn .val { stroke: var(--warn); }
+.gauge.bad .val { stroke: var(--bad); }
+.gauge text { font-size: 17px; font-weight: 700; fill: var(--text); text-anchor: middle; }
+.gauge .g-label { font-size: 12.5px; font-weight: 500; margin-top: -2px; }
+.gauge .g-sub { font-size: 11.5px; color: var(--muted); }
+.trend { min-width: 0; }
+.ranges { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 4px; }
+.range { border: 1px solid var(--line); background: transparent; color: var(--muted); border-radius: 999px; padding: 1px 9px; font-size: 11.5px; cursor: pointer; font-family: inherit; }
+.range:hover { border-color: var(--accent); }
+.range.on { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+.trend-plot { position: relative; }
+/* ltr so text-anchor means the same in this RTL page: labels stay inside the plot. */
+.trend-svg { width: 100%; height: auto; display: block; overflow: visible; direction: ltr; }
+.trend-svg .grid { stroke: var(--line); stroke-width: .6; }
+.trend-svg .ylab, .trend-svg .xlab { font-size: 9.5px; fill: var(--muted); }
+/* Persian time labels read rtl, so their anchors are the rtl ones (start = right end). */
+.trend-svg .xlab { direction: rtl; }
+.trend-svg .cap { stroke: var(--bad); stroke-dasharray: 4 3; stroke-width: 1.1; }
+.trend-svg .ram-area { fill: var(--ram); opacity: .13; }
+.trend-svg .ram { fill: none; stroke: var(--ram); stroke-width: 1.8; stroke-linejoin: round; }
+.trend-svg .cpu { fill: none; stroke: var(--cpu); stroke-width: 1.4; stroke-linejoin: round; }
+.trend-svg .guide { stroke: var(--muted); stroke-width: .8; stroke-dasharray: 2 2; }
+.trend-svg .hit { fill: transparent; cursor: crosshair; }
+.trend-tip { position: absolute; top: 4px; background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow); border-radius: 8px; padding: 4px 8px; font-size: 11.5px; white-space: nowrap; pointer-events: none; z-index: 2; }
+.trend-tip .tt { color: var(--muted); }
+.trend-tip .pk { color: var(--muted); }
+.trend-empty { color: var(--muted); font-size: 12.5px; padding: 26px 0; text-align: center; border: 1px dashed var(--line); border-radius: 10px; }
+.trend-legend { display: flex; gap: 12px; font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+.sw { display: inline-block; width: 10px; height: 3px; border-radius: 2px; vertical-align: middle; margin-inline-end: 4px; }
+.sw.ram { background: var(--ram); }
+.sw.cpu { background: var(--cpu); }
+.sw.cap { height: 0; border-top: 1.5px dashed var(--bad); border-radius: 0; }
+@media (max-width: 420px) { .usage { grid-template-columns: 1fr; } .gauges { flex-direction: row; justify-content: center; } }
 .errs { font-family: var(--mono); font-size: 11.5px; direction: ltr; text-align: left; color: var(--bad); background: var(--bad-soft); border-radius: 8px; padding: 4px 8px; margin-top: 6px; max-height: 80px; overflow: hidden; white-space: pre-wrap; }
 .small-muted { color: var(--muted); font-size: 12.5px; }
 .empty { color: var(--muted); text-align: center; padding: 18px; background: var(--panel); border: 1px dashed var(--line); border-radius: var(--radius); }

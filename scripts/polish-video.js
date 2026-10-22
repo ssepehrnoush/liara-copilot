@@ -83,21 +83,23 @@ if (!VOICE) {
     const b = ((timeline.frames[i + 1]?.t ?? timeline.end) - t0) / 1000;
     list.push(`file '${f.path || `frames/${f.file}`}'`, `duration ${Math.max(0.001, warp(b) - warp(a)).toFixed(4)}`);
   });
+  // The concat demuxer ignores the last entry's duration. The screen is still at the end, so
+  // that last frame is held for seconds: without this repeat the main video came out ~4 s short,
+  // the closing card started early and the voice clips after the cut ran over it.
+  list.push(list.at(-2));
   framesList = path.join(REC, 'frames-voice.txt');
   fs.writeFileSync(framesList, list.join('\n'));
   const before = totalMain;
   totalMain = warp(totalMain);
   narration = cues.map((c) => ({ id: c.id, screen: '', say: c.text, start: warp(c.start), dur: warp(c.end) - warp(c.start), voice: c.clip && { file: path.join(VOICE, c.clip.file), dur: c.clip.dur } }));
   const at = (id) => narration.find((n) => n.id === id)?.start;
-  chapterAt = ['ask-deploy', 'v2', 'injection', 'load', 'audit'].map(at);
+  chapterAt = ['ask-deploy', 'cost', 'rule-ask'].map(at);
   console.log(`voice mode: ${cues.length} cues, main video ${Math.round(before)} s -> ${Math.round(totalMain)} s`);
 }
 const CHAPTERS = [
-  { n: 1, title: 'دیپلوی از صفر', sub: 'از معرفی پروژه تا سایت آماده روی لیارا', icon: 'ch1-deploy.png' },
-  { n: 2, title: 'خطای ۵۰۰ و رفعش', sub: 'پیدا کردن علت از روی لاگ و رفعش با تأیید کاربر', icon: 'ch2-error.png' },
-  { n: 3, title: 'حملهٔ تزریق دستور', sub: 'وقتی کسی از طریق لاگ می‌خواهد به هوش مصنوعی دستور بدهد', icon: 'ch3-shield.png' },
-  { n: 4, title: 'کندی و نشت حافظه', sub: 'از هشدار کندی تا پیدا کردن مشکل در کد', icon: 'ch4-memory.png' },
-  { n: 5, title: 'گزارش و توقف اضطراری', sub: 'ثبت همهٔ کارها و دکمهٔ توقف', icon: 'ch5-audit.png' },
+  { n: 1, title: 'از پروژه تا سایت سالم', sub: 'دیپلوی، خطای ۵۰۰ و نشت حافظه روی لیارای واقعی', icon: 'ch1-deploy.png' },
+  { n: 2, title: 'هزینه و مسیرهای اجرا', sub: 'شش مسیر سنجیده‌شده، هزینهٔ هر کاربر و سرور خودی', icon: 'ch4-memory.png' },
+  { n: 3, title: 'خودکارسازی و ایمنی', sub: 'قانون‌های خودکار، ضد تزریق دستور و توقف اضطراری', icon: 'ch3-shield.png' },
 ].map((c, i) => ({ ...c, from: chapterAt[i] })).filter((c) => c.from !== undefined); // a scene that was not recorded has no chapter
 const chapters = [
   { from: 0, to: CHAPTERS[0].from, badge: null },
@@ -147,7 +149,7 @@ for (const n of narration) {
 }
 for (const c of chapters) {
   if (!c.n) continue;
-  events.push(`Dialogue: 1,${ts(c.from)},${ts(c.to)},Badge,,0,0,0,,${rtl(`قسمت ${fa(c.n)} از ${fa(5)}، ${c.title}`)}`);
+  events.push(`Dialogue: 1,${ts(c.from)},${ts(c.to)},Badge,,0,0,0,,${rtl(`قسمت ${fa(c.n)} از ${fa(CHAPTERS.length)}، ${c.title}`)}`);
 }
 const ass = [
   '[Script Info]', 'ScriptType: v4.00+', 'PlayResX: 1920', 'PlayResY: 1080', 'WrapStyle: 0', '',
@@ -207,9 +209,9 @@ ${c.bar ? '<div class="bar"><i></i></div>' : ''}
 </body></html>`;
 
 const cards = [
-  { id: 'intro', dur: cardDur('intro', CARD.intro), icon: 'hero.png', kicker: 'چالش لیارا · هکاتون Agentic AI استارکوچ', title: 'لیارا کوپایلت', sub: 'دستیاری که به برنامه‌نویس‌ها کمک می‌کند سایتشان را روی لیارا منتشر و نگهداری کنند', chips: ['اتصال مستقیم به لیارا', 'هر تغییر با تأیید کاربر', 'پیدا کردن علت خطا'] },
+  { id: 'intro', dur: cardDur('intro', CARD.intro), icon: 'hero.png', kicker: 'چالش لیارا · هکاتون Agentic AI استارکوچ', title: 'لیارا کوپایلت', sub: 'دستیاری که به برنامه‌نویس‌ها کمک می‌کند سایتشان را روی لیارا منتشر و نگهداری کنند', chips: ['اتصال مستقیم به لیارا', 'هر تغییر با تأیید کاربر', 'پیدا کردن و رفع علت خطا'] },
   ...chapters.filter((c) => c.n).map((c) => ({ id: `ch${c.n}`, dur: cardDur(`ch${c.n}`, CARD.chapter), icon: c.icon, kicker: `قسمت ${['', 'اول', 'دوم', 'سوم', 'چهارم', 'پنجم'][c.n]}`, num: fa(c.n), title: c.title, sub: c.sub, bar: true })),
-  { id: 'outro', dur: cardDur('outro', CARD.outro), icon: 'hero.png', kicker: 'کد و مستندات پروژه', title: 'لیارا کوپایلت', url: 'github.com/ssepehrnoush/liara-copilot', chips: ['دیپلوی از صفر', 'عیب‌یابی ۵۰۰ و کندی', 'ضد تزریق دستور', 'توقف اضطراری'] },
+  { id: 'outro', dur: cardDur('outro', CARD.outro), icon: 'hero.png', kicker: 'کد و مستندات پروژه', title: 'لیارا کوپایلت', url: 'github.com/ssepehrnoush/liara-copilot', chips: ['دیپلوی و رفع خطا روی لیارای واقعی', 'اصلاح کد با تأیید', 'شش مسیر اجرا با هزینه', 'قانون‌های خودکار', 'ضد تزریق دستور', 'اتصال دامنه با راهنمای ایرنیک', 'برگشت نسخه', 'تغییر پلن'] },
 ];
 
 const browser = await chromium.launch({ executablePath: CHROME, headless: true });

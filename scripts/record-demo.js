@@ -16,12 +16,14 @@ const BASE = opt('--base', 'http://localhost:4100');
 const SHOP = opt('--shop', 'https://ketabkadeh-demo.liara.run');
 const OUT = path.resolve(opt('--out', '_share/rec'));
 const CHROME = opt('--chrome', 'C:/Program Files/Google/Chrome/Application/chrome.exe');
-const ONLY = opt('--scenes', '1,2,3,4,5,6,7').split(',').map(Number);
+// 1 intro, 2 deploy, 3 new version, 4 HTTP 500, 5 memory leak, 6 execution paths, 7 standing rule,
+// 8 prompt injection, 9 audit log and kill switch.
+const ONLY = opt('--scenes', '1,2,3,4,5,6,7,8,9').split(',').map(Number);
 const PAYMENT_KEY = 'sandbox_test_key_123';
 const APP = new URL(SHOP).hostname.split('.')[0];
 // Narration lines by id, and the voice clips made from them by scripts/voice-over.js.
 const NARRATION = JSON.parse(fs.readFileSync(opt('--narration', 'scripts/demo-narration.json'), 'utf8'));
-const VOICE = path.join(opt('--voice', '_share/voice'), 'manifest.json');
+const VOICE = path.join(opt('--voice', '_share/voice-marin'), 'manifest.json');
 const voice = fs.existsSync(VOICE) ? JSON.parse(fs.readFileSync(VOICE, 'utf8')) : {};
 // Fixed pauses (reading a card, looking at the shop) are scaled by --pace; the voice sets the rest.
 const PACE = Number(opt('--pace', '1'));
@@ -262,6 +264,21 @@ async function backToCopilot() {
   await page.bringToFront();
   await attach(page);
 }
+// Opens a page of the copilot itself (the execution paths page, or back to the chat) in the
+// recorded tab, with the overlays put back.
+async function goCopilot(pathname, readSec = 2) {
+  await page.goto(BASE + pathname, { waitUntil: 'load' });
+  await sleep(1500);
+  await page.evaluate(OVERLAY);
+  await page.evaluate(() => document.fonts.ready);
+  await attach(page);
+  await hold(readSec);
+}
+async function scrollTo(selector, readSec) {
+  await page.locator(selector).first().evaluate((e) => e.scrollIntoView({ block: 'center', behavior: 'smooth' }));
+  await sleep(700);
+  if (readSec) await hold(readSec);
+}
 
 // ---------------------------------------------------------------- scenes
 const browser = await chromium.launch({ executablePath: CHROME, headless: true });
@@ -314,7 +331,14 @@ try {
     await click(page, page.locator('#send'));
     await approveAll({ readSec: 4 });
     await fast(8, () => waitTurnEnd());
-    await hold(2);
+    // The release row keeps its steps open: point at the wait for Liara's version switch.
+    const sw = page.locator('.act .steps li', { hasText: 'جابه‌جایی نسخه' }).last();
+    if (await sw.count()) {
+      await say('switch');
+      await moveTo(page, sw);
+      await hold(3);
+    }
+    await hold(1);
   }
 
   if (ONLY.includes(4)) {
@@ -347,6 +371,88 @@ try {
   }
 
   if (ONLY.includes(5)) {
+    await say('load');
+    // Four visitors a second: the small plan has half a CPU core, more would hide the leak behind CPU.
+    const load = await term(page, `node demo/loadgen.js ${SHOP} 4 15`, ['demo/loadgen.js', SHOP, '4', '15'], { keep: true });
+    await hold(5);
+    await fast(20, async () => {
+      await say('load-growing');
+      await page.locator('#alertBox.degraded, #alertBox.down').waitFor({ timeout: 900000 });
+    });
+    const down = await page.locator('#alertBox.down').count();
+    await say(down ? 'alert-down' : 'alert-slow');
+    await moveTo(page, page.locator('#alertBox'));
+    await hold(2);
+    const diag5 = await count('.card:has-text("عیب‌یابی")');
+    const verify5 = await count('.card:has-text("بررسی نتیجه")');
+    await click(page, page.locator('#alertBox button', { hasText: 'بررسی کن' }));
+    await fast(2, () => waitNew('.card:has-text("عیب‌یابی")', diag5));
+    // The visitors stop here so the check after the fix measures the fix, not new load.
+    load.kill();
+    await page.evaluate(() => window.__term.hide());
+    await say('cause-leak');
+    await show('.card:has-text("عیب‌یابی")', 5);
+    const showDiff = async (c) => {
+      await say('code-card');
+      const d = c.locator('.diff');
+      if (await d.count()) await d.first().evaluate((e) => e.scrollIntoView({ block: 'center', behavior: 'smooth' }));
+    };
+    let approved = await approveAll({ readSec: 6, onCard: showDiff });
+    await fast(6, () => waitTurnEnd());
+    if (!approved) {
+      // The agent stopped at a recommendation: the user asks for the code fix in plain words.
+      await send('اصلاح کد رو انجام بده.');
+      approved = await approveAll({ readSec: 6, onCard: showDiff });
+      await fast(6, () => waitTurnEnd());
+    }
+    if ((await count('.card:has-text("بررسی نتیجه")')) > verify5) {
+      await say('verified-leak');
+      await show('.card:has-text("بررسی نتیجه")', 5);
+    }
+  }
+
+  if (ONLY.includes(6)) {
+    await say('cost');
+    await moveTo(page, page.locator('#costChip'));
+    await hold(3);
+    await say('paths-intro');
+    await click(page, page.locator('a.chip.link'));
+    await goCopilot('/paths.html', 3);
+    await say('paths-table');
+    await scrollTo('#resultsTable', 3);
+    await scrollTo('#costChart', 3);
+    await say('paths-calc');
+    await scrollTo('#lineChart', 1);
+    await moveTo(page, page.locator('#users'));
+    // Slide the user count up so the self-hosted line crosses the current model.
+    for (const v of [2000, 4000, 6000, 8000, 10000, 15000, 20000]) {
+      await page.locator('#users').evaluate((e, x) => { e.value = x; e.dispatchEvent(new Event('input', { bubbles: true })); }, v);
+      await sleep(450);
+    }
+    await hold(2);
+    await say('paths-host');
+    await scrollTo('#hostTable', 4);
+    await say('paths-rejected');
+    await scrollTo('#rejected', 4);
+    await goCopilot('/', 2);
+  }
+
+  if (ONLY.includes(7)) {
+    await say('rule-ask');
+    await click(page, page.locator('#suggestions button', { hasText: 'قانون خودکار' }));
+    await hold(1);
+    await click(page, page.locator('#send'));
+    await approveAll({ readSec: 4, onCard: async () => { await say('rule-card'); } });
+    await fast(4, () => waitTurnEnd());
+    const panel = page.locator('.auto-rules');
+    await panel.waitFor({ timeout: 30000 }).catch(() => {});
+    if (await panel.count()) {
+      await moveTo(page, panel);
+      await hold(3);
+    }
+  }
+
+  if (ONLY.includes(8)) {
     await say('injection');
     const reviews = async () => {
       const r = await page.evaluate(async (app) => (await fetch(`/api/apps/${app}/logs`)).json(), APP).catch(() => ({}));
@@ -368,49 +474,7 @@ try {
     await hold(2);
   }
 
-  if (ONLY.includes(6)) {
-    await say('load');
-    const load = await term(page, `node demo/loadgen.js ${SHOP} 3 15`, ['demo/loadgen.js', SHOP, '3', '15'], { keep: true });
-    await hold(6);
-    await fast(20, async () => {
-      await say('load-growing');
-      await page.locator('#alertBox.degraded, #alertBox.down').waitFor({ timeout: 900000 });
-    });
-    const down = await page.locator('#alertBox.down').count();
-    await say(down ? 'alert-down' : 'alert-slow');
-    await moveTo(page, page.locator('#alertBox'));
-    await hold(3);
-    const diag6 = await count('.card:has-text("عیب‌یابی")');
-    const verify6 = await count('.card:has-text("بررسی نتیجه")');
-    const hand6 = await count('.card.handoff');
-    await click(page, page.locator('#alertBox button', { hasText: 'بررسی کن' }));
-    await fast(2, () => waitNew('.card:has-text("عیب‌یابی")', diag6));
-    // The visitors stop here so the check after the fix measures the fix, not new load.
-    load.kill();
-    await page.evaluate(() => window.__term.hide());
-    await say('cause-leak');
-    await show('.card:has-text("عیب‌یابی")', 7);
-    await say('code');
-    const approved = await approveAll({ readSec: 5, onCard: async () => { await say('restart-card'); } });
-    await fast(6, () => waitTurnEnd());
-    if (!approved) {
-      // The agent stopped at a recommendation: the user picks the next step in plain words.
-      await say('accept-plan');
-      await send('همین کار رو بکن: یه ری‌استارت موقت بزن و برای ایجنت کدنویس دستور کار اصلاح کد رو بنویس.');
-      await approveAll({ readSec: 5, onCard: async () => { await say('restart-card-2'); } });
-      await fast(6, () => waitTurnEnd());
-    }
-    if ((await count('.card.handoff')) > hand6) {
-      await say('handoff');
-      await show('.card.handoff', 6);
-    }
-    if ((await count('.card:has-text("بررسی نتیجه")')) > verify6) {
-      await say('verified-leak');
-      await show('.card:has-text("بررسی نتیجه")', 5);
-    }
-  }
-
-  if (ONLY.includes(7)) {
+  if (ONLY.includes(9)) {
     await say('audit');
     await click(page, page.locator('.tab', { hasText: 'گزارش اقدامات' }));
     await hold(5);

@@ -1,7 +1,7 @@
-// Voice-over for the demo video: speaks every narration line with OpenAI text-to-speech,
-// trims silence and gently speeds each clip up (rubberband keeps pitch and formants). The recorder then holds each
-// subtitle exactly as long as its clip, so the video is timed to the voice.
-//   node scripts/voice-over.js [--narration scripts/demo-narration.json] [--timeline REC/timeline.json] [--out _share/voice]
+// Voice-over for the demo video: speaks every narration line with OpenAI gpt-audio (voice marin,
+// the same voice as the Lemon reels), trims silence and speeds each clip up a little (rubberband
+// keeps pitch and formants). The recorder then holds each subtitle exactly as long as its clip.
+//   node scripts/voice-over.js [--narration scripts/demo-narration.json] [--timeline REC/timeline.json] [--out _share/voice-marin]
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -13,14 +13,13 @@ const args = process.argv.slice(2);
 const opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
 const NAR = opt('--narration', 'scripts/demo-narration.json');
 const TIMELINE = opt('--timeline', '');
-const OUT = path.resolve(opt('--out', '_share/voice'));
-const MODEL = opt('--model', 'gpt-4o-mini-tts-2025-12-15');
-const VOICE = opt('--voice', 'cedar');
-const WPS = Number(opt('--wps', '2.6'));
-// Above ~1.35x the stretch starts to warble; a slower clip is better than a broken one.
-const MAX_TEMPO = Number(opt('--max-tempo', '1.35'));
-const STYLE = 'Voice: a young Iranian software developer presenting his own project. Speak natural, casual Tehrani Persian, warm and confident, smiling. '
-  + 'Pace: fast and energetic, like an excited demo, with short natural pauses only at the end of sentences. Read the text exactly as written.';
+const OUT = path.resolve(opt('--out', '_share/voice-marin'));
+const MODEL = opt('--model', 'gpt-audio');
+const VOICE = opt('--voice', 'marin');
+// The Lemon reels sound right at 1.07 to 1.1x; faster than that the Persian starts to blur.
+const TEMPO = Number(opt('--tempo', '1.08'));
+const STYLE = 'You are a voice actor recording a product demo. Read the user\'s Persian text aloud exactly as written, word for word, '
+  + 'in natural, warm, confident Tehrani Persian at a lively but clear pace. Do not answer it, translate it, add or skip anything.';
 const key = process.env.OPENAI_API_KEY;
 if (!key) throw new Error('OPENAI_API_KEY is not set');
 const proxy = process.env.OPENAI_PROXY || process.env.HTTPS_PROXY || '';
@@ -33,26 +32,35 @@ const narration = JSON.parse(fs.readFileSync(NAR, 'utf8'));
 const texts = new Set(Object.values(narration).map((t) => t.replace('{pct}', '۹۳')));
 if (TIMELINE) for (const c of JSON.parse(fs.readFileSync(TIMELINE, 'utf8')).cues) texts.add(c.text);
 
-// How the speech model should say a few English words; the subtitles keep the original text.
-const SPOKEN = [['BoxAPI', 'باکس اِی‌پی‌آی'], ['PAYMENT_API_KEY', 'پِیمِنت اِی‌پی‌آی کی'], ['viewHistory', 'ویو هیستوری'], ['trending.js', 'ترندینگ جی‌اس'], ['Node.js', 'نود جی‌اس'], ['۵۰۰', 'پونصد'], ['۳۰۰۰', 'سه‌هزار'], ['۹۳', 'نود و سه']];
-const spoken = (text) => SPOKEN.reduce((t, [a, b]) => t.split(a).join(b), text);
+// How the speech model should say Latin names, numbers and the few Persian words it can read two
+// ways (diacritics only there); the subtitles keep the original text. Longer keys go first.
+const SPOKEN = [['PAYMENT_API_KEY', 'پِیمِنت اِی‌پی‌آی کی'], ['BoxAPI', 'باکس اِی‌پی‌آی'], ['API', 'اِی‌پی‌آی'], ['viewHistory', 'ویو هیستوری'], ['trending.js', 'ترندینگ جی‌اِس'],
+  ['Node.js', 'نود جی‌اِس'], ['DeepSeek', 'دیپ‌سیک'], ['gpt-oss', 'جی‌پی‌تی اُو اِس اِس'], ['RTX 4090', 'آر تی اِکس چهل نود'],
+  ['۵۰۰', 'پونصد'], ['۳۰۰۰', 'سه‌هزار'], ['۸۵', 'هشتاد و پنج'], ['۹۳', 'نود و سه'], ['رم', 'رَم'], ['سرور', 'سِروِر'], ['کد', 'کُد']];
+const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+// Whole words only, so «کد» does not touch a longer word that contains it.
+const spoken = (text) => SPOKEN.reduce((t, [a, b]) => t.replace(new RegExp(`(?<![\\p{L}\\p{M}])${esc(a)}(?![\\p{L}\\p{M}])`, 'gu'), b), text);
 
 const duration = (f) => Number(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', f]).toString().trim());
 
+// gpt-audio speaks through chat completions with an audio modality.
 async function speak(text, file) {
   for (let attempt = 0; attempt < 4; attempt++) {
     try {
-      const r = await fetch('https://api.openai.com/v1/audio/speech', {
+      const r = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST', dispatcher,
         headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: MODEL, voice: VOICE, input: text, instructions: STYLE, response_format: 'wav' }),
+        body: JSON.stringify({ model: MODEL, modalities: ['text', 'audio'], audio: { voice: VOICE, format: 'wav' }, messages: [{ role: 'system', content: STYLE }, { role: 'user', content: text }] }),
         signal: AbortSignal.timeout(120000),
       });
-      if (r.ok) { fs.writeFileSync(file, Buffer.from(await r.arrayBuffer())); return; }
+      const j = await r.json();
+      const data = j.choices?.[0]?.message?.audio?.data;
+      if (data) { fs.writeFileSync(file, Buffer.from(data, 'base64')); return; }
+      if (attempt === 3) console.log('speech error:', JSON.stringify(j.error || j).slice(0, 200));
     } catch { /* network hiccup or timeout: try again */ }
     await new Promise((res) => setTimeout(res, 2000 * (attempt + 1)));
   }
-  throw new Error(`text-to-speech failed for: ${text.slice(0, 40)}`);
+  throw new Error(`speech failed for: ${text.slice(0, 40)}`);
 }
 
 // Every take is transcribed back and compared with the text; a take that does not match
@@ -83,7 +91,8 @@ async function transcribe(file) {
   } catch { return ''; }
 }
 // Display words people read on screen; the transcriber writes digits and Latin names the same way.
-const heard = (text) => text.replace(/PAYMENT_API_KEY/g, 'پیمنت ای‌پی‌آی کی').replace(/BoxAPI/g, 'باکس ای‌پی‌آی').replace(/viewHistory/g, 'ویو هیستوری').replace(/trending\.js/g, 'ترندینگ جی‌اس').replace(/Node\.js/g, 'نود جی‌اس');
+const heard = (text) => text.replace(/PAYMENT_API_KEY/g, 'پیمنت ای‌پی‌آی کی').replace(/BoxAPI/g, 'باکس ای‌پی‌آی').replace(/viewHistory/g, 'ویو هیستوری').replace(/trending\.js/g, 'ترندینگ جی‌اس').replace(/Node\.js/g, 'نود جی‌اس')
+  .replace(/DeepSeek/g, 'دیپ‌سیک').replace(/gpt-oss/g, 'جی‌پی‌تی او اس اس').replace(/RTX 4090/g, 'آرتی‌ایکس ۴۰۹۰').replace(/۵۰۰/g, 'پانصد').replace(/۳۰۰۰/g, 'سه هزار');
 
 async function take(text, id, n) {
   const raw = path.join(OUT, `${id}.raw.wav`);
@@ -92,8 +101,7 @@ async function take(text, id, n) {
   // words), then speed up until the clip reaches the target pace.
   const trimmed = path.join(OUT, `${id}.trim.wav`);
   execFileSync('ffmpeg', ['-v', 'error', '-y', '-i', raw, '-af', 'silenceremove=start_periods=1:start_threshold=-50dB:stop_periods=-1:stop_duration=0.45:stop_threshold=-50dB:stop_silence=0.25,areverse,silenceremove=start_periods=1:start_threshold=-50dB,areverse', trimmed]);
-  const words = text.split(/\s+/).length;
-  const tempo = Math.min(MAX_TEMPO, Math.max(1, WPS / (words / duration(trimmed))));
+  const tempo = TEMPO;
   const file = path.join(OUT, `${id}.take${n}.wav`);
   execFileSync('ffmpeg', ['-v', 'error', '-y', '-i', trimmed, '-af', `rubberband=tempo=${tempo.toFixed(3)}:transients=smooth:formant=preserved`, '-ar', '48000', '-ac', '1', file]);
   fs.rmSync(raw); fs.rmSync(trimmed);
@@ -104,7 +112,7 @@ async function take(text, id, n) {
 
 let made = 0;
 for (const text of texts) {
-  const id = crypto.createHash('sha1').update(`v3|${MODEL}|${VOICE}|${WPS}|${MAX_TEMPO}|${spoken(text)}`).digest('hex').slice(0, 12);
+  const id = crypto.createHash('sha1').update(`v4|${MODEL}|${VOICE}|${TEMPO}|${spoken(text)}`).digest('hex').slice(0, 12);
   const file = path.join(OUT, `${id}.wav`);
   const have = manifest[text]?.file === path.basename(file) && fs.existsSync(file);
   if (have && (manifest[text].score ?? 0) >= MIN_SCORE) continue;

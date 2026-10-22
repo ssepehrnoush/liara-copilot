@@ -416,30 +416,118 @@
 
   // ------------------------------------------------------------ status panel
   let statusTimer = null;
+  // Per app: the last errors (refreshed with the panel) and the usage history of the chosen range.
   const metricCache = new Map();
-  function sparkline(points, limit) {
-    if (!points?.length) return null;
-    const W = 300;
-    const H = 44;
-    const vals = points.map((p) => p.mb);
-    const max = Math.max(limit || 0, ...vals) * 1.05 || 1;
-    const t0 = points[0].t;
-    const t1 = points.at(-1).t || t0 + 1;
-    const x = (t) => ((t - t0) / Math.max(1, t1 - t0)) * W;
-    const y = (v) => H - (v / max) * H;
-    const line = points.map((p, i) => `${i ? 'L' : 'M'}${x(p.t).toFixed(1)},${y(p.mb).toFixed(1)}`).join(' ');
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
-    svg.setAttribute('preserveAspectRatio', 'none');
-    svg.setAttribute('class', 'spark');
-    svg.innerHTML = `<path class="area" d="${line} L${W},${H} L0,${H} Z"/><path class="line" d="${line}"/>${limit ? `<line class="limit" x1="0" x2="${W}" y1="${y(limit)}" y2="${y(limit)}"/>` : ''}`;
-    return svg;
+  const RANGES = [[5, '۵ دقیقه'], [30, '۳۰ دقیقه'], [360, '۶ ساعت'], [1440, '۲۴ ساعت']];
+  const rangeOf = new Map();
+  const rangeFor = (name) => rangeOf.get(name) || 5;
+  // A longer range changes slowly, so it is fetched less often.
+  const seriesMaxAge = (minutes) => (minutes <= 5 ? 12000 : minutes <= 30 ? 30000 : 60000);
+  const level = (pct) => (pct >= 85 ? 'bad' : pct >= 65 ? 'warn' : 'ok');
+  const svg = (w, hgt, cls, inner) => {
+    const el = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    el.setAttribute('viewBox', `0 0 ${w} ${hgt}`);
+    el.setAttribute('class', cls);
+    el.innerHTML = inner;
+    return el;
+  };
+
+  // Half-circle gauge: the share of the plan in use, colored by how close it is to the cap.
+  function gauge(label, pct, sub) {
+    const R = 40;
+    const cx = 52;
+    const cy = 48;
+    const L = Math.PI * R;
+    const arc = `M${cx - R},${cy} A${R},${R} 0 0 1 ${cx + R},${cy}`;
+    const fill = (L * Math.min(1, Math.max(0, pct) / 100)).toFixed(1);
+    return h('div', { class: `gauge ${level(pct)}` },
+      svg(104, 54, 'arc', `<path class="track" d="${arc}"/>${pct > 0 ? `<path class="val" d="${arc}" stroke-dasharray="${fill} ${L.toFixed(1)}"/>` : ''}<text x="${cx}" y="${cy - 3}">${faNum(pct)}٪</text>`),
+      h('div', { class: 'g-label' }, label), h('div', { class: 'g-sub' }, sub));
   }
 
-  async function loadMetrics(name) {
+  // RAM and CPU over the chosen range, both as a share of the plan, so one axis fits both and the
+  // dashed line is the cap. Time runs like the text: the past on the right, now on the left.
+  function trendChart(a, m) {
+    const minutes = rangeFor(a.name);
+    const pills = h('div', { class: 'ranges' }, ...RANGES.map(([min, fa]) => h('button', { class: `range${min === minutes ? ' on' : ''}`, onclick: () => setRange(a.name, min) }, fa)));
+    const span = (m?.minutes || minutes) * 60000;
+    // Liara's clock can run a little ahead of this machine's: "now" is whichever is later, so the
+    // newest point never falls off the left edge.
+    const to = Math.max(Date.now(), m?.memory?.at(-1)?.t || 0, m?.cpu?.at(-1)?.t || 0);
+    const from = to - span;
+    const ram = (m?.memory || []).filter((p) => p.t >= from).map((p) => ({ t: p.t, v: (p.mb / a.ramLimitMB) * 100, hi: (p.hiMb / a.ramLimitMB) * 100, mb: p.mb, hiMb: p.hiMb }));
+    const cpu = a.cpuLimit ? (m?.cpu || []).filter((p) => p.t >= from).map((p) => ({ t: p.t, v: (p.v / a.cpuLimit) * 100, hi: (p.hi / a.cpuLimit) * 100 })) : [];
+    if (ram.length < 2 && cpu.length < 2) return h('div', { class: 'trend' }, pills, h('div', { class: 'trend-empty' }, 'هنوز داده‌ای در این بازه نیست.'));
+    const W = 300;
+    const PW = 270;
+    const top = 6;
+    const PH = 110;
+    const peak = Math.max(100, ...ram.map((p) => p.v), ...cpu.map((p) => p.v));
+    const ymax = peak <= 100 ? 100 : Math.ceil(peak / 25) * 25;
+    const x = (t) => PW * (1 - (t - from) / span);
+    const y = (v) => top + PH - (Math.max(0, v) / ymax) * PH;
+    // A stretch with no points (the app was off or restarting) is a gap, not a straight line.
+    const segments = (pts) => {
+      const steps = pts.slice(1).map((p, i) => p.t - pts[i].t).sort((p, q) => p - q);
+      const gap = Math.max(90000, 3 * (steps[Math.floor(steps.length / 2)] || 0));
+      const segs = [];
+      pts.forEach((p, i) => { if (!i || p.t - pts[i - 1].t > gap) segs.push([]); segs.at(-1).push(p); });
+      return segs;
+    };
+    const line = (seg) => seg.map((p, i) => `${i ? 'L' : 'M'}${x(p.t).toFixed(1)},${y(p.v).toFixed(1)}`).join(' ');
+    const area = (seg) => `${line(seg)} L${x(seg.at(-1).t).toFixed(1)},${y(0)} L${x(seg[0].t).toFixed(1)},${y(0)} Z`;
+    const ramSegs = ram.length > 1 ? segments(ram) : [];
+    const grid = [0, 50, 100].map((v) => `<line class="grid" x1="0" x2="${PW}" y1="${y(v)}" y2="${y(v)}"/><text class="ylab" x="${PW + 4}" y="${y(v) + 3.5}">${faNum(v)}٪</text>`).join('');
+    const startLabel = minutes >= 60 ? `${faNum(minutes / 60)} ساعت پیش` : `${faNum(minutes)} دقیقه پیش`;
+    const chart = svg(W, 136, 'trend-svg', `${grid}<line class="cap" x1="0" x2="${PW}" y1="${y(100)}" y2="${y(100)}"/>`
+      + (ramSegs.length ? `<path class="ram-area" d="${ramSegs.map(area).join(' ')}"/><path class="ram" d="${ramSegs.map(line).join(' ')}"/>` : '')
+      + (cpu.length > 1 ? `<path class="cpu" d="${segments(cpu).map(line).join(' ')}"/>` : '')
+      + `<line class="guide" x1="0" x2="0" y1="${top}" y2="${top + PH}" visibility="hidden"/>`
+      + `<text class="xlab" x="${PW}" y="132" text-anchor="start">${startLabel}</text><text class="xlab" x="0" y="132" text-anchor="end">الان</text>`
+      + `<rect class="hit" x="0" y="0" width="${PW}" height="${top + PH}"/>`);
+    const tip = h('div', { class: 'trend-tip hidden' });
+    const nearest = (pts, t) => pts.reduce((b, p) => (!b || Math.abs(p.t - t) < Math.abs(b.t - t) ? p : b), null);
+    chart.addEventListener('mousemove', (e) => {
+      const box = chart.getBoundingClientRect();
+      const px = ((e.clientX - box.left) / box.width) * W;
+      if (px > PW) return;
+      const t = from + (1 - px / PW) * span;
+      const r = nearest(ram, t);
+      const c = nearest(cpu, t);
+      const at = (r || c).t;
+      if (Math.abs(at - t) > span / 20) { tip.classList.add('hidden'); return; }
+      const guide = chart.querySelector('.guide');
+      guide.setAttribute('x1', x(at));
+      guide.setAttribute('x2', x(at));
+      guide.setAttribute('visibility', 'visible');
+      tip.replaceChildren(h('div', { class: 'tt' }, minutes > 30 ? new Date(at).toLocaleString('fa-IR', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' }) : time(at)),
+        r ? h('div', {}, h('i', { class: 'sw ram' }), `رم ${faNum(r.mb)}MB (${faNum(r.v)}٪)`, r.hiMb > r.mb ? h('span', { class: 'pk' }, ` · بیشینه ${faNum(r.hiMb)}MB`) : null) : null,
+        c ? h('div', {}, h('i', { class: 'sw cpu' }), `CPU ${faNum(c.v)}٪`, c.hi > c.v + 1 ? h('span', { class: 'pk' }, ` · بیشینه ${faNum(c.hi)}٪`) : null) : null);
+      tip.classList.remove('hidden');
+      const left = (x(at) / W) * box.width;
+      tip.style.left = left > box.width / 2 ? 'auto' : `${left + 10}px`;
+      tip.style.right = left > box.width / 2 ? `${box.width - left + 10}px` : 'auto';
+    });
+    chart.addEventListener('mouseleave', () => { tip.classList.add('hidden'); chart.querySelector('.guide').setAttribute('visibility', 'hidden'); });
+    return h('div', { class: 'trend' }, pills, h('div', { class: 'trend-plot' }, chart, tip),
+      h('div', { class: 'trend-legend' }, h('span', {}, h('i', { class: 'sw ram' }), 'رم'), cpu.length > 1 ? h('span', {}, h('i', { class: 'sw cpu' }), 'CPU') : null, h('span', {}, h('i', { class: 'sw cap' }), 'سقف پلن')));
+  }
+
+  async function setRange(name, minutes) {
+    rangeOf.set(name, minutes);
+    await loadMetrics(name, true);
+    refreshStatus(false);
+  }
+
+  async function loadMetrics(name, withSeries) {
+    const minutes = rangeFor(name);
     try {
-      const [m, l] = await Promise.all([api(`/api/apps/${encodeURIComponent(name)}/metrics?minutes=20`), api(`/api/apps/${encodeURIComponent(name)}/logs`)]);
-      metricCache.set(name, { at: Date.now(), memory: m.memory || [], errors: (l.lines || []).filter((x) => x.err).slice(-3) });
+      const [m, l] = await Promise.all([
+        withSeries ? api(`/api/apps/${encodeURIComponent(name)}/metrics?minutes=${minutes}`) : null,
+        api(`/api/apps/${encodeURIComponent(name)}/logs`),
+      ]);
+      const c = metricCache.get(name) || {};
+      metricCache.set(name, { ...c, at: Date.now(), errors: (l.lines || []).filter((x) => x.err).slice(-3), ...(m ? { seriesAt: Date.now(), minutes: m.minutes || minutes, memory: m.memory || [], cpu: m.cpu || [] } : {}) });
     } catch { /* ignore */ }
   }
 
@@ -473,9 +561,13 @@
     chip.textContent = s.balance === null ? 'موجودی: نامشخص' : `موجودی: ${toman(s.balance)}`;
     const box = $('#apps');
     const managed = s.apps.filter((a) => a.managed);
-    await Promise.all(managed.map((a) => (force || !metricCache.has(a.name) || Date.now() - metricCache.get(a.name).at > 12000 ? loadMetrics(a.name) : null)));
+    await Promise.all(managed.map((a) => {
+      const c = metricCache.get(a.name);
+      const series = force || !c?.seriesAt || c.minutes !== rangeFor(a.name) || Date.now() - c.seriesAt > seriesMaxAge(rangeFor(a.name));
+      return series || Date.now() - c.at > 12000 ? loadMetrics(a.name, series) : null;
+    }));
     const cards = s.apps.map((a) => appCard(a));
-    const rules = s.rules?.length ? h('div', { class: 'rules' },
+    const rules = s.rules?.length ? h('div', { class: 'auto-rules' },
       h('div', { class: 'rules-h' }, '⚙️ قانون‌های خودکار'),
       ...s.rules.map((r) => h('div', { class: 'rule-row' },
         h('div', {}, r.fa, h('div', { class: 'small-muted' }, r.lastFiredAt ? `آخرین اجرا ${time(r.lastFiredAt)} · ${faNum(r.firedLastHour)} بار در ساعت اخیر` : 'هنوز اجرا نشده')),
@@ -500,9 +592,9 @@
         a.managed ? h('span', { class: 'badge' }, 'مدیریت با کوپایلت') : h('span', { class: 'badge' }, 'فقط خواندنی')),
       h('div', { class: 'row small-muted' }, `${a.platform || ''} · ${a.planID || ''}`, a.lastRelease ? ` · ریلیز ${a.lastRelease.tag || ''} (${a.lastRelease.state})` : ''),
       a.isDeployed ? h('a', { href: a.url, target: '_blank', rel: 'noopener' }, a.url) : null,
-      a.managed && memPct !== null ? h('div', { class: 'metricrow' }, h('span', {}, 'رم'), h('div', { class: `bar ram ${memPct >= 85 ? 'bad' : memPct >= 65 ? 'warn' : ''}` }, h('i', { style: `width:${Math.min(100, memPct)}%` })), h('span', { class: 'v' }, `${a.memMB} / ${a.ramLimitMB} MB`)) : null,
-      a.managed && cpuPct !== null ? h('div', { class: 'metricrow' }, h('span', {}, 'CPU'), h('div', { class: 'bar' }, h('i', { style: `width:${cpuPct}%` })), h('span', { class: 'v' }, `${cpuPct}%`)) : null,
-      a.managed && m?.memory?.length > 1 ? [h('div', { class: 'small-muted' }, 'رم در ۲۰ دقیقهٔ اخیر (خط قرمز: سقف پلن)'), sparkline(m.memory, a.ramLimitMB)] : null,
+      a.managed && memPct !== null ? h('div', { class: 'usage' },
+        h('div', { class: 'gauges' }, gauge('رم', memPct, `${faNum(a.memMB)} از ${faNum(a.ramLimitMB)}MB`), cpuPct !== null ? gauge('CPU', cpuPct, `از ${faNum(a.cpuLimit, 2)} هسته`) : null),
+        trendChart(a, m)) : null,
       lp ? h('div', { class: 'small-muted' }, `آخرین تست: ${lp.ok === lp.total ? 'موفق' : `${faNum(lp.total - lp.ok)} صفحه خطا`} · ${faNum(lp.p50ms)}ms · ${time(lp.t)}`) : null,
       m?.errors?.length ? h('div', { class: 'errs' }, m.errors.map((e) => e.line).join('\n')) : null,
     );
