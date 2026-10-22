@@ -1,45 +1,96 @@
-# Liara Copilot (لیارا کوپایلت)
+<div align="center">
 
-**A Persian AI agent that takes a developer from "here is my project" to a live app on [Liara](https://liara.ir), then finds and fixes what breaks it, and changes nothing without the user's approval.**
+<img src="assets/logo.svg" width="64" alt="">
 
-**▶ Demo video (5 min, Persian voice, recorded on real Liara):** [liara-copilot-demo.mp4](https://github.com/ssepehrnoush/liara-copilot/releases/download/demo-video/liara-copilot-demo.mp4) · [release page](https://github.com/ssepehrnoush/liara-copilot/releases/tag/demo-video)
+# Liara Copilot · لیارا کوپایلت
 
-![license](https://img.shields.io/badge/license-MIT-blue) ![node](https://img.shields.io/badge/node-%3E%3D20-339933) ![liara](https://img.shields.io/badge/Liara-management%20API-00a3ff) ![human in the loop](https://img.shields.io/badge/changes-human%20approved-orange) ![tests](https://img.shields.io/badge/tests-node%20--test-lightgrey)
+**Deploy to [Liara](https://liara.ir), find what breaks, and fix it, in a Persian chat.<br>Reading is automatic; every change waits for your approval.**
 
-<p align="center"><img src="assets/demo.svg" alt="Animated terminal demo: HTTP 500 on checkout, diagnosis from logs, approval card, fix on Liara, verified" width="780"></p>
+<a href="https://ssepehrnoush.github.io/liara-copilot/"><img src="assets/demo-poster.jpg" width="860" alt="Watch the 4:53 demo, recorded on the real Liara API"></a>
 
-A captured run (simulator backend, recorded with an earlier model; the copilot now answers with gpt-6-sol through BoxAPI, OpenAI as fallback): the checkout page returns HTTP 500. The copilot reads the logs and ranks a missing `PAYMENT_API_KEY` first (93%), because the error starts right after the last release. It then shows an approval card with a password field, sets the variable on Liara and probes again: success goes from 67% to 100%.
+<b><a href="https://ssepehrnoush.github.io/liara-copilot/">▶ Watch the demo (4:53, Persian voice)</a></b> &nbsp;·&nbsp; <a href="https://github.com/ssepehrnoush/liara-copilot/releases/download/demo-video/liara-copilot-demo.mp4">Download MP4</a> &nbsp;·&nbsp; <a href="#لیارا-کوپایلت">مستندات فارسی</a> &nbsp;·&nbsp; <a href="SECURITY.md">Security</a>
 
-- **Deploy:** analyses a folder or GitHub repo, proposes the cheapest plan that fits with its monthly price, creates the app, uploads, follows the build and health-checks the URL.
-- **SRE:** reads logs, events and CPU/RAM trends against plan limits, plus live probes. It ranks causes with evidence, applies the smallest safe fix, then verifies before and after. The status panel shows RAM and CPU as gauges next to a trend chart you can switch between 5 minutes, 30 minutes, 6 hours and 24 hours (about as far back as Liara keeps metrics).
-- **Code fixes:** when the cause is in the code (a memory leak, a bug behind the errors), it finds the file and line, shows the exact edit as a red/green diff, and only if the user approves patches the code, ships a new release and verifies it. If the user says no, it writes a precise task for their coding agent instead.
-- **Safety:** read-only tools run on their own; every change goes through an approval card enforced in code. There are no delete tools, prompt injection in logs is detected, and a kill switch is one click away. See [SECURITY.md](SECURITY.md).
-- **Standing rules for repetitive operations:** "whenever RAM passes 85%, restart and tell me, at most once an hour". The user approves the rule once on a card. From then on the health watcher runs it on its own within the hourly limit, reports each run in the chat with the measured result, and logs it. Only notify, investigate and restart can be automated; plan changes, rollbacks and code fixes always need their own card.
-- **Cost and model choice:** the model cost of every turn is shown in the header and written to the audit log. The four demo tasks were measured with six execution paths, from the current model to open-weight ones and a no-model rule mode. The results are on the in-app page "مسیرهای اجرا" (`/paths.html`), along with a monthly cost calculator for Liara and an estimate for self-hosting.
+<br>
 
-| Memory leak on real Liara: the exact code edit (red/green) waits for approval, next to the RAM/CPU gauges and trend | A standing rule ("whenever RAM passes 85%, restart and tell me") gets its own approval card once; then the health watcher runs it |
-|---|---|
-| ![leak](assets/ui-leak.jpg) | ![rule](assets/ui-rule.jpg) |
+![license](https://img.shields.io/badge/license-MIT-blue) ![node](https://img.shields.io/badge/node-%3E%3D20-339933) ![liara](https://img.shields.io/badge/Liara-management%20API-00a3ff) ![human in the loop](https://img.shields.io/badge/changes-human%20approved-orange) ![tests](https://img.shields.io/badge/tests-21%20passing-brightgreen)
 
-| Prompt injection hidden in a visitor review, flagged and ignored |
-|---|
-| ![injection](assets/ui-injection.jpg) |
+</div>
 
-**Also in the copilot, but not in the video** (screenshots from the simulator; the cards were rejected, nothing changed):
+<br>
 
-| The fix handed to the user's coding agent (Claude Code, Cursor, Copilot) instead of changing the code | A custom domain: an approval card, plus the IRNIC steps the user does by hand | A plan change: high risk, a red edge, the cost difference and an extra "I know this costs money" tick |
+## What it does
+
+| 🚀 Deploy | 🩺 Diagnose | 🛠️ Fix the code |
 |---|---|---|
-| ![handoff](assets/ui-handoff.jpg) | ![domain](assets/ui-domain.jpg) | ![plan](assets/ui-plan.jpg) |
+| Reads a folder or a public GitHub repo, proposes the cheapest plan that fits (with its monthly price), then creates the app, uploads, follows the build and checks the live URL. | Reads logs, events and CPU/RAM against the plan's limits, probes the site, and ranks the likely causes with their evidence. Then it verifies before and after with numbers. | Finds the file and line behind a leak or a bug, shows the exact edit in red and green, and ships it only after you approve. Or it writes a precise task for your coding agent. |
+| **🛡️ Safety** | **⚙️ Standing rules** | **💰 Cost and models** |
+| An approval card enforced in code for every change, no delete tools, prompt injection in logs flagged and ignored, a one-click kill switch. See [SECURITY.md](SECURITY.md). | "Whenever RAM passes 85%, restart and tell me, at most once an hour." Approved once; the health watcher then runs it and reports every run. | Model cost per turn in the UI and the audit log; the four demo tasks measured on six execution paths, with a monthly cost calculator for Liara. |
 
-## Install
+## Screens
+
+**On the real Liara API** (frames from the video)
+
+<table>
+<tr>
+<td width="33%"><img src="assets/ui-leak.jpg" alt="Memory leak: the code edit waits for approval"></td>
+<td width="33%"><img src="assets/ui-rule.jpg" alt="A standing rule gets its own approval card"></td>
+<td width="33%"><img src="assets/ui-injection.jpg" alt="Prompt injection in a review, flagged and ignored"></td>
+</tr>
+<tr>
+<td><sub>A memory leak: the exact code edit waits for approval, next to the RAM/CPU gauges and trend.</sub></td>
+<td><sub>A standing rule gets its own approval card once; then the health watcher runs it.</sub></td>
+<td><sub>An instruction hidden in a visitor review lands in the logs; it is flagged and ignored.</sub></td>
+</tr>
+</table>
+
+**Also built, not shown in the video** (simulator; the cards were rejected, nothing changed)
+
+<table>
+<tr>
+<td width="33%"><img src="assets/ui-handoff.jpg" alt="Task for the user's coding agent"></td>
+<td width="33%"><img src="assets/ui-domain.jpg" alt="Custom domain with IRNIC steps"></td>
+<td width="33%"><img src="assets/ui-plan.jpg" alt="High-risk plan change card"></td>
+</tr>
+<tr>
+<td><sub>The fix handed to your coding agent (Claude Code, Cursor, Copilot) instead of changing the code.</sub></td>
+<td><sub>A custom domain: an approval card plus the IRNIC steps you do by hand.</sub></td>
+<td><sub>A plan change: high risk, the cost difference, and an extra "I know this costs money" tick.</sub></td>
+</tr>
+</table>
+
+## How it works
+
+```mermaid
+flowchart LR
+  U([You, in Persian]) --> C[Chat UI]
+  C --> A[Agent<br/>gpt-6-sol via BoxAPI]
+  A -->|read-only tools run on their own| R[Status, logs, metrics,<br/>live probes, code search]
+  A -->|changes| G{{Approval card<br/>enforced in code}}
+  G -->|you approve| W[Deploy, env vars, restart,<br/>code fix, plan, domain]
+  R --> L[(Liara API)]
+  W --> L
+  H[Health watcher] -->|alerts and standing rules| C
+  H --> L
+```
+
+## Quick start
 
 ```bash
 npm install && cp .env.example .env && npm start
 ```
 
-Fill `LIARA_API_TOKEN` (and `LIARA_TEAM_ID` if your credit is on a team) plus one LLM key, then open http://localhost:4100. `npm run sim` runs the same UI against a local simulator of the Liara API; no credit is needed for that. `npm test` runs the unit tests.
+- **Real Liara:** fill `LIARA_API_TOKEN` (plus `LIARA_TEAM_ID` if your credit is on a team) and one LLM key, then open http://localhost:4100.
+- **No credit, no keys:** `npm run sim` runs the same UI against a local simulator of the Liara API. Without an LLM key it works in rule mode; a full deploy takes about 5 seconds.
+- **Tests:** `npm test` (21 unit tests: analysis, plan choice, secret masking, injection detection, cause ranking, code-fix safety, probe and file guards).
 
-Full documentation is in Persian below.
+<details>
+<summary>Animated terminal walkthrough (simulator, an earlier model)</summary>
+<br>
+<p align="center"><img src="assets/demo.svg" alt="Animated terminal demo: HTTP 500 on checkout, diagnosis from logs, approval card, fix, verified" width="780"></p>
+The checkout page returns HTTP 500. The copilot reads the logs and ranks a missing <code>PAYMENT_API_KEY</code> first, because the error starts right after the last release. It asks for the key on an approval card with a password field, sets it on Liara and probes again: success goes from 67% to 100%.
+</details>
+
+Full documentation, architecture, API endpoints and honest limits are in Persian below.
 
 ---
 
