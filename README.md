@@ -61,7 +61,7 @@
 ## How it works
 
 ```mermaid
-flowchart LR
+flowchart TB
   U([You, in Persian]) --> C[Chat UI]
   C --> A[Agent<br/>gpt-6-sol via BoxAPI]
   A -->|read-only tools run on their own| R[Status, logs, metrics,<br/>live probes, code search]
@@ -118,7 +118,7 @@ Full documentation, architecture, API endpoints and honest limits are in Persian
 ## معماری
 
 ```mermaid
-flowchart LR
+flowchart TB
   U[کاربر] -->|چت فارسی| UI[رابط وب RTL<br/>گفتگو + کارت تأیید + وضعیت زنده]
   UI <-->|SSE / REST| S[سرور Node.js]
   S --> A[حلقهٔ ایجنت<br/>tool calling]
