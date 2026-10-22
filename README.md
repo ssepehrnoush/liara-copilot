@@ -4,9 +4,11 @@
 
 # Liara Copilot · لیارا کوپایلت
 
-**Deploy to [Liara](https://liara.ir), find what breaks, and fix it, in a Persian chat.<br>Reading is automatic; every change waits for your approval.**
+**Deploy to [Liara](https://liara.ir), find what breaks, and fix it, in a Persian chat.<br>Reading is automatic; every change waits for your approval. Styled after the Liara console, where it would live.**
 
-<a href="https://ssepehrnoush.github.io/liara-copilot/"><img src="assets/demo-poster.jpg" width="860" alt="Watch the 4:53 demo, recorded on the real Liara API"></a>
+<a href="https://ssepehrnoush.github.io/liara-copilot/"><img src="assets/demo-preview.webp" width="860" alt="Silent preview of the demo; click to watch the full 4:53 video with Persian voice"></a>
+
+<sub>Silent preview from the demo. <b>Click it for the full 4:53 video with Persian voice</b>, recorded on the real Liara API.</sub>
 
 <b><a href="https://ssepehrnoush.github.io/liara-copilot/">▶ Watch the demo (4:53, Persian voice)</a></b> &nbsp;·&nbsp; <a href="https://github.com/ssepehrnoush/liara-copilot/releases/download/demo-video/liara-copilot-demo.mp4">Download MP4</a> &nbsp;·&nbsp; <a href="#لیارا-کوپایلت">مستندات فارسی</a> &nbsp;·&nbsp; <a href="SECURITY.md">Security</a>
 

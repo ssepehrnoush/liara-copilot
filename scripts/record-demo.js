@@ -3,7 +3,7 @@
 // The mouse pointer and the small terminal panel are overlays so viewers can follow along;
 // every click, request and command behind them is real.
 //
-//   node scripts/record-demo.js --base http://localhost:4100 --shop https://ketabkadeh-app.liara.run --out _share/rec
+//   node scripts/record-demo.js --base http://localhost:4100 --shop https://ketabkadeh-final.liara.run --out _share/rec
 //   then: node scripts/build-video.js _share/rec
 import fs from 'node:fs';
 import path from 'node:path';
@@ -13,7 +13,7 @@ import { chromium } from 'playwright-core';
 const args = process.argv.slice(2);
 const opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
 const BASE = opt('--base', 'http://localhost:4100');
-const SHOP = opt('--shop', 'https://ketabkadeh-app.liara.run');
+const SHOP = opt('--shop', 'https://ketabkadeh-final.liara.run');
 const OUT = path.resolve(opt('--out', '_share/rec'));
 const CHROME = opt('--chrome', 'C:/Program Files/Google/Chrome/Application/chrome.exe');
 // 1 intro, 2 deploy, 3 new version, 4 HTTP 500, 5 memory leak, 6 execution paths, 7 standing rule,

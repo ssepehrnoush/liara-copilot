@@ -218,7 +218,7 @@ async function fallbackTurn(session, userText, ctx) {
   };
   const runToolByName = async (name, args) => {
     const r = await runTool(session, { id: `fb_${randomUUID().slice(0, 8)}`, function: { name, arguments: JSON.stringify(args) } }, ctx);
-    if (r?.securityNotice) await say(`⚠️ در متنی که خواندم (${r.securityNotice.promptInjectionAttempts.length} خط) کسی سعی کرده به هوش مصنوعی دستور بدهد. این متن داده حساب شد و هیچ کاری بر اساس آن انجام نشد.`);
+    if (r?.securityNotice) await say(`در متنی که خواندم (${r.securityNotice.promptInjectionAttempts.length} خط) کسی سعی کرده به هوش مصنوعی دستور بدهد. این متن داده حساب شد و هیچ کاری بر اساس آن انجام نشد.`);
     return r;
   };
   await runFallback(session, userText, { runToolByName, say });

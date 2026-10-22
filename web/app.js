@@ -18,12 +18,72 @@
   const time = (t) => new Date(t).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   const md = (text) => DOMPurify.sanitize(marked.parse(text || '', { breaks: true }));
 
-  const ICONS = {
-    get_account_overview: '💳', list_plans: '📋', analyze_project: '🔍', get_app_status: '📊', get_logs: '📜', get_metrics: '📈', http_check: '🌐',
-    investigate_incident: '🩺', verify_recovery: '✅', search_project_code: '🔎', read_project_file: '📄', handoff_to_coding_agent: '🤝', get_domain_guide: '🌍',
-    deploy_new_app: '🚀', deploy_new_version: '📦', fix_code: '🛠️', set_env_vars: '🔑', restart_app: '🔄', rollback_release: '↩️', change_plan: '⚙️', stop_app: '⏹️', start_app: '▶️', add_domain: '🌍', create_rule: '⚙️', list_rules: '⚙️', disable_rule: '⏸️',
+  // Line icons (24px grid, drawn with the text colour) instead of emoji, so the UI reads like a
+  // product and matches the console it would live in.
+  const PATHS = {
+    sparkles: '<path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.14-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.14a.5.5 0 0 1 .96 0l1.58 6.14a2 2 0 0 0 1.44 1.44l6.14 1.58a.5.5 0 0 1 0 .96l-6.14 1.58a2 2 0 0 0-1.44 1.44l-1.58 6.14a.5.5 0 0 1-.96 0z"/><path d="M20 3v4M22 5h-4"/>',
+    wallet: '<path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/>',
+    list: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
+    scan: '<path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><circle cx="11" cy="11" r="3"/><path d="m16 16-2.5-2.5"/>',
+    server: '<rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><path d="M6 6h.01M6 18h.01"/>',
+    file: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/><path d="M14 2v4a2 2 0 0 0 2 2h4M10 9H8M16 13H8M16 17H8"/>',
+    activity: '<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>',
+    globe: '<circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20M2 12h20"/>',
+    pulse: '<path d="M3 12h4l2-5 4 10 2-5h6"/>',
+    check: '<path d="M20 6 9 17l-5-5"/>',
+    checkCircle: '<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>',
+    x: '<path d="M18 6 6 18M6 6l12 12"/>',
+    search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+    code: '<path d="m16 18 6-6-6-6M8 6l-6 6 6 6"/>',
+    bot: '<rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4M8 16h.01M16 16h.01"/>',
+    link: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
+    rocket: '<path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/>',
+    upload: '<path d="M4 14.9A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.24"/><path d="M12 12v9M16 16l-4-4-4 4"/>',
+    wrench: '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
+    key: '<circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6M15.5 7.5l3 3L22 7l-3-3"/>',
+    refresh: '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
+    undo: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
+    arrowUpCircle: '<circle cx="12" cy="12" r="10"/><path d="m16 12-4-4-4 4M12 16V8"/>',
+    power: '<path d="M12 2v10M18.4 6.6a9 9 0 1 1-12.77.04"/>',
+    play: '<path d="M6 4l14 8-14 8z"/>',
+    pause: '<rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/>',
+    cog: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12M2 12h3M19 12h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12"/>',
+    shield: '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/>',
+    shieldAlert: '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="M12 8v4M12 16h.01"/>',
+    stethoscope: '<path d="M11 2v2M5 2v2M5 3H4a2 2 0 0 0-2 2v4a6 6 0 0 0 12 0V5a2 2 0 0 0-2-2h-1"/><path d="M8 15a6 6 0 0 0 12 0v-3"/><circle cx="20" cy="10" r="2"/>',
+    alert: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4M12 17h.01"/>',
+    flame: '<path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.07-2.14-.22-4.05 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.15.43-2.29 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>',
+    gauge: '<path d="m12 14 4-4M3.34 19a10 10 0 1 1 17.32 0"/>',
+    package: '<path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.3 7 12 12l8.7-5M12 22V12"/>',
+    chart: '<path d="M3 3v18h18M18 17V9M13 17V5M8 17v-3"/>',
+    coins: '<circle cx="8" cy="8" r="6"/><path d="M18.09 10.37A6 6 0 1 1 10.34 18M7 6h1v4M16.71 13.88l.7.71-2.82 2.82"/>',
+    clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+    lock: '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+    info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>',
+    user: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+    eye: '<path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>',
+    stop: '<path d="M7.86 2h8.28L22 7.86v8.28L16.14 22H7.86L2 16.14V7.86z"/><path d="M9 9h6v6H9z"/>',
+    copy: '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
+    chevron: '<path d="m6 9 6 6 6-6"/>',
+    route: '<circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/><circle cx="18" cy="5" r="3"/>',
+    plus: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M12 7v6M9 10h6"/>',
   };
-  const IMPACT_ICON = { cost: '💰', downtime: '⏱️', restart: '🔄', reversible: '↩️', security: '🔒', note: 'ℹ️' };
+  const icon = (name, cls = '') => {
+    const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    s.setAttribute('viewBox', '0 0 24 24');
+    s.setAttribute('class', `ic ${cls}`.trim());
+    s.setAttribute('aria-hidden', 'true');
+    s.innerHTML = PATHS[name] || PATHS.sparkles;
+    return s;
+  };
+  // A small tinted square with an icon, at the start of every card title.
+  const tile = (name, tone = 'accent') => h('span', { class: `itile ${tone}` }, icon(name));
+  const ICONS = {
+    get_account_overview: 'wallet', list_plans: 'list', analyze_project: 'scan', get_app_status: 'server', get_logs: 'file', get_metrics: 'activity', http_check: 'globe',
+    investigate_incident: 'stethoscope', verify_recovery: 'checkCircle', search_project_code: 'search', read_project_file: 'code', handoff_to_coding_agent: 'bot', get_domain_guide: 'link',
+    deploy_new_app: 'rocket', deploy_new_version: 'upload', fix_code: 'wrench', set_env_vars: 'key', restart_app: 'refresh', rollback_release: 'undo', change_plan: 'arrowUpCircle', stop_app: 'power', start_app: 'play', add_domain: 'link', create_rule: 'cog', list_rules: 'cog', disable_rule: 'pause',
+  };
+  const IMPACT_ICON = { cost: 'coins', downtime: 'clock', restart: 'refresh', reversible: 'undo', security: 'lock', note: 'info' };
 
   // ------------------------------------------------------------ session
   let sid = localStorage.getItem('lc_session');
@@ -160,7 +220,7 @@
         break;
       case 'security':
         add(h('div', { class: 'card security' },
-          h('h4', {}, '🛡️ تلاش برای تزریق دستور شناسایی شد'),
+          h('h4', {}, tile('shieldAlert', 'bad'), 'تلاش برای تزریق دستور شناسایی شد'),
           h('div', {}, `در ${ev.app ? `لاگ‌ها یا فایل‌های ${ev.app}` : 'متن خوانده‌شده'} متنی هست که سعی می‌کند به هوش مصنوعی دستور بدهد. کوپایلت این متن را فقط داده حساب کرد؛ هیچ ابزاری به خاطر آن اجرا نمی‌شود و هر تغییری همچنان کارت تأیید شما را لازم دارد.`),
           h('pre', {}, ev.samples.join('\n'))));
         break;
@@ -207,10 +267,11 @@
     const secs = g.acts.reduce((s, a) => s + (a.ms || 0), 0) / 1000;
     // replaceChildren() would print a null as the text "null", so leave the optional parts out.
     g.head.replaceChildren(...[
-      running.length ? h('span', { class: 'spin' }) : h('span', { class: failed ? 'bad-ico' : 'ok-ico' }, failed ? '✗' : '✓'),
+      running.length ? h('span', { class: 'spin' }) : h('span', { class: failed ? 'bad-ico' : 'ok-ico' }, icon(failed ? 'x' : 'check')),
       h('span', {}, running.length ? `در حال ${running.at(-1).label}…` : `${faNum(g.acts.length)} بررسی خودکار انجام شد${failed ? `، ${faNum(failed)} ناموفق` : ''}`),
+      h('span', { class: 'g-icons' }, ...g.acts.map((a) => icon(ICONS[a.tool] || 'cog'))),
       !running.length && secs >= 0.1 ? h('span', { class: 'meta' }, `${faNum(secs, 1)} ثانیه`) : null,
-      h('span', { class: 'chev' }, '⌄'),
+      icon('chevron', 'chev'),
     ].filter(Boolean));
   }
 
@@ -223,7 +284,7 @@
     const steps = h('ul', { class: 'steps' });
     body.append(steps);
     const el = h('div', { class: 'act' },
-      h('div', { class: 'head', onclick: () => el.classList.toggle('open') }, status, h('span', {}, ICONS[tool] || '🔧'), h('span', { class: 'label' }, label || tool),
+      h('div', { class: 'head', onclick: () => el.classList.toggle('open') }, status, icon(ICONS[tool] || 'cog', 'act-ic'), h('span', { class: 'label' }, label || tool),
         h('span', { class: `badge ${kind}` }, kind === 'auto' ? 'خودکار' : 'با تأیید شما'), meta),
       body);
     a = { el, status, meta, steps, body, stepEls: new Map(), log: null, tool, label: label || tool };
@@ -248,7 +309,7 @@
       return;
     }
     let li = a.stepEls.get(ev.step);
-    const ico = ev.status === 'done' ? h('span', { class: 'ok-ico' }, '✓') : ev.status === 'failed' ? h('span', { class: 'bad-ico' }, '✗') : h('span', { class: 'spin' });
+    const ico = ev.status === 'done' ? h('span', { class: 'ok-ico' }, icon('check')) : ev.status === 'failed' ? h('span', { class: 'bad-ico' }, icon('x')) : h('span', { class: 'spin' });
     const STEP_FA = { balance: 'موجودی', network: 'شبکهٔ خصوصی', create: 'ساخت اپ', envs: 'متغیرها', archive: 'فشرده‌سازی', upload: 'آپلود', release: 'ریلیز', build: 'بیلد و استقرار', probe: 'تست زنده', wait: 'بالا آمدن اپ', restart: 'ری‌استارت', resize: 'تغییر پلن', scale: 'روشن/خاموش', switch: 'جابه‌جایی نسخه' };
     const content = [ico, h('span', {}, STEP_FA[ev.step] || ev.step), h('span', { class: 'd' }, ev.detail || '')];
     if (!li) {
@@ -263,7 +324,7 @@
 
   function actEnd(ev) {
     const a = actRow(ev.callId, ev.tool, ev.labelFa, 'auto');
-    a.status.replaceWith(a.status = ev.ok ? h('span', { class: 'ok-ico' }, '✓') : h('span', { class: 'bad-ico' }, '✗'));
+    a.status.replaceWith(a.status = ev.ok ? h('span', { class: 'ok-ico' }, icon('check')) : h('span', { class: 'bad-ico' }, icon('x')));
     a.meta.textContent = ev.ms ? `${faNum(ev.ms / 1000, 1)} ثانیه` : '';
     Object.assign(a, { done: true, ok: ev.ok, ms: ev.ms || 0 });
     if (a.group) paintGroup(a.group);
@@ -292,7 +353,7 @@
   function analysisCard(d) {
     const r = d.recommendation || {};
     return h('div', { class: 'card' },
-      h('h4', {}, '🔍 نتیجهٔ تحلیل پروژه', h('span', { class: 'badge' }, d.suggestedName)),
+      h('h4', {}, tile('scan'), 'نتیجهٔ تحلیل پروژه', h('span', { class: 'badge' }, d.suggestedName)),
       h('dl', { class: 'kv' },
         h('dt', {}, 'نوع پروژه'), h('dd', {}, `${d.platform || 'نامشخص'} (${d.platformReason})`),
         h('dt', {}, 'پورت'), h('dd', {}, Number(d.port).toLocaleString('fa-IR', { useGrouping: false })),
@@ -317,7 +378,7 @@
     const memPct = ev.memory?.pctOfLimit;
     const stat = (n, l, cls) => h('div', { class: `stat ${cls || ''}` }, h('div', { class: 'n' }, n), h('div', { class: 'l' }, l));
     return h('div', { class: 'card' },
-      h('h4', {}, '🩺 عیب‌یابی', h('span', { class: 'badge' }, ev.app?.name), d.symptom ? h('span', { class: 'small-muted' }, `«${d.symptom}»`) : null),
+      h('h4', {}, tile('stethoscope'), 'عیب‌یابی', h('span', { class: 'badge' }, ev.app?.name), d.symptom ? h('span', { class: 'small-muted' }, `«${d.symptom}»`) : null),
       h('div', { class: 'sub' }, `منابع بررسی‌شده: وضعیت سرویس، ${faNum(ev.releases?.length)} ریلیز اخیر، ${faNum(ev.logs?.lines)} خط لاگ، ${faNum(ev.events?.total)} رویداد، نمودار CPU و رم، و ${faNum(p.total)} درخواست زنده.`),
       h('div', { class: 'stats' },
         stat(succ === null ? '-' : `${faNum(succ)}٪`, 'درخواست موفق', succ === 100 ? 'good' : succ >= 50 ? 'warn' : 'bad'),
@@ -341,7 +402,7 @@
     const a = d.after || {};
     const row = (l, x, y) => h('tr', {}, h('td', {}, l), h('td', { class: 'before' }, x), h('td', {}, y));
     return h('div', { class: 'card' },
-      h('h4', {}, '✅ بررسی نتیجه', h('span', { class: `verdict ${d.verdict}` }, d.verdictFa)),
+      h('h4', {}, tile('checkCircle', 'ok'), 'بررسی نتیجه', h('span', { class: `verdict ${d.verdict}` }, d.verdictFa)),
       h('table', { class: 'changes' },
         h('tr', {}, h('th', {}, 'شاخص'), h('th', {}, 'قبل'), h('th', {}, 'بعد')),
         row('درخواست موفق', b.successPct !== undefined && b.successPct !== null ? `${faNum(b.successPct)}٪` : '-', `${faNum(a.successPct)}٪`),
@@ -354,9 +415,9 @@
   }
 
   function handoffCard(d) {
-    const btn = h('button', { class: 'ghost small', onclick: async () => { await navigator.clipboard.writeText(d.markdown); btn.textContent = 'کپی شد ✓'; } }, 'کپی برای ایجنت کدنویس');
+    const btn = h('button', { class: 'ghost small', onclick: async () => { await navigator.clipboard.writeText(d.markdown); btn.textContent = 'کپی شد'; } }, 'کپی برای ایجنت کدنویس');
     return h('div', { class: 'card handoff' },
-      h('h4', {}, '🤝 پیام برای ایجنت کدنویس (Claude Code، Cursor، Copilot)'),
+      h('h4', {}, tile('bot'), 'پیام برای ایجنت کدنویس (Claude Code، Cursor، Copilot)'),
       h('div', { class: 'sub' }, `ذخیره شد: ${d.savedTo}. کافی است به ایجنت کدنویستان بگویید این فایل را بخواند و اجرا کند.`),
       h('pre', {}, d.markdown),
       h('div', { class: 'actions' }, btn),
@@ -365,7 +426,7 @@
 
   function deployCard(d) {
     if (!d.ok) {
-      return h('div', { class: 'card' }, h('h4', {}, '⚠️ انتشار کامل نشد'),
+      return h('div', { class: 'card' }, h('h4', {}, tile('alert', 'warn'), 'انتشار کامل نشد'),
         d.error === 'insufficient_balance' ? h('div', { class: 'blocked' }, `موجودی ${toman(d.balanceToman)} است؛ برای هر ساعت ${toman(d.needPerHourToman)} لازم است.`) : null,
         d.failReason ? h('div', { class: 'blocked' }, d.failReason) : null,
         d.error && d.error !== 'insufficient_balance' ? h('div', { class: 'blocked' }, d.error) : null,
@@ -374,7 +435,7 @@
     }
     const p = d.probe;
     return h('div', { class: 'card' },
-      h('h4', {}, d.files ? '🛠️ کد اصلاح و منتشر شد' : '🎉 سایت زنده است'),
+      h('h4', {}, tile(d.files ? 'wrench' : 'rocket', 'ok'), d.files ? 'کد اصلاح و منتشر شد' : 'سایت زنده است'),
       d.files ? h('div', { class: 'small-muted' }, `${faNum(d.changedLines)} خط در ${d.files.join('، ')} عوض شد؛ پشتیبان فایل‌های اصلی نگه داشته شد.`) : null,
       d.url ? h('div', {}, h('a', { href: d.url, target: '_blank', rel: 'noopener', style: 'direction:ltr;font-weight:700' }, d.url)) : null,
       p ? h('div', { class: 'small-muted' }, `تست زنده: ${faNum(p.ok)} از ${faNum(p.total)} درخواست موفق، زمان پاسخ میانه ${faNum(p.p50ms)} میلی‌ثانیه`) : null,
@@ -412,7 +473,7 @@
     approve.addEventListener('click', () => send('approve'));
     reject.addEventListener('click', () => send('reject'));
     const el = h('div', { class: `card approval r-${ev.risk}` },
-      h('h4', {}, '🛡️ نیاز به تأیید شما:', c.titleFa || ev.labelFa, h('span', { class: `badge ${ev.risk}` }, `ریسک ${ev.riskFa}`)),
+      h('h4', {}, tile(ICONS[ev.tool] || 'shield', `r-${ev.risk}`), h('span', { class: 't-stack' }, h('span', { class: 'kick' }, 'اقدام پیشنهادی · نیاز به تأیید شما'), h('span', {}, c.titleFa || ev.labelFa)), h('span', { class: `badge ${ev.risk}` }, `ریسک ${ev.riskFa}`)),
       c.summaryFa ? h('div', {}, c.summaryFa) : null,
       c.reasonFa ? h('div', { class: 'why' }, h('b', {}, 'چرا؟ '), c.reasonFa) : null,
       c.changes?.length ? h('table', { class: 'changes' },
@@ -421,7 +482,7 @@
       c.diff?.length ? h('div', { class: 'diff' }, c.diff.map((d) => h('div', { class: 'hunk' },
         h('div', { class: 'hunk-h' }, `${d.file}:${d.line}`),
         h('pre', {}, d.before.map((l) => h('span', { class: 'del' }, `- ${l}`)), d.after.map((l) => h('span', { class: 'add' }, `+ ${l}`)))))) : null,
-      c.impacts?.length ? h('ul', { class: 'impacts' }, c.impacts.map((x) => h('li', {}, `${IMPACT_ICON[x.kind] || '•'} ${x.text}`))) : null,
+      c.impacts?.length ? h('ul', { class: 'impacts' }, c.impacts.map((x) => h('li', {}, icon(IMPACT_ICON[x.kind] || 'info'), h('span', {}, x.text)))) : null,
       c.steps?.length ? h('details', {}, h('summary', { class: 'small-muted' }, 'مراحل اجرا'), h('ol', { class: 'ordered' }, c.steps.map((s) => h('li', {}, s)))) : null,
       inputEls.length ? h('div', { class: 'inputs' }, inputEls) : null,
       c.blocked ? h('div', { class: 'blocked' }, c.blocked.reasonFa) : null,
@@ -582,7 +643,7 @@
     const [stFa, stCls] = RULE_STATUS[ev.status] || [ev.status, ''];
     const hyps = ev.data?.hypotheses || [];
     const body = [
-      h('h4', {}, '⚙️ قانون خودکار', h('span', { class: `badge ${stCls}` }, stFa)),
+      h('h4', {}, tile('cog'), 'قانون خودکار', h('span', { class: `badge ${stCls}` }, stFa)),
       h('div', { class: 'sub' }, ev.ruleFa),
       h('div', {}, h('b', {}, 'چه دید: '), ev.readingFa),
       h('div', {}, h('b', {}, 'نتیجه: '), ev.resultFa),
@@ -612,7 +673,7 @@
     }));
     const cards = s.apps.map((a) => appCard(a));
     const rules = s.rules?.length ? h('div', { class: 'auto-rules' },
-      h('div', { class: 'rules-h' }, '⚙️ قانون‌های خودکار'),
+      h('div', { class: 'rules-h' }, icon('cog'), 'قانون‌های خودکار'),
       ...s.rules.map((r) => h('div', { class: 'rule-row' },
         h('div', {}, r.fa, h('div', { class: 'small-muted' }, r.lastFiredAt ? `آخرین اجرا ${time(r.lastFiredAt)} · ${faNum(r.firedLastHour)} بار در ساعت اخیر` : 'هنوز اجرا نشده')),
         h('button', { class: 'ghost small', title: 'این قانون دیگر اجرا نمی‌شود', onclick: async () => { await api(`/api/rules/${r.id}/disable`, { method: 'POST' }).catch(() => null); refreshStatus(true); } }, 'خاموش')))) : null;
@@ -655,7 +716,7 @@
     }
     box.className = `alert ${al.level}`;
     box.replaceChildren(
-      h('span', {}, al.level === 'down' ? '🔥' : '⚠️'),
+      icon(al.level === 'down' ? 'flame' : 'alert'),
       h('span', { class: 'msg-a' }, `ناظر سلامت: ${al.app}، ${al.fa}`),
       h('button', { class: 'primary small', onclick: () => { box.classList.add('hidden'); sendText(`ناظر سلامت هشدار داد: «${al.fa}» روی ${al.app}. بررسی کن علتش چیه.`); } }, 'بررسی کن'),
       h('button', { class: 'ghost small', onclick: () => box.classList.add('hidden') }, 'بعداً'),
@@ -669,7 +730,7 @@
     killOn = Boolean(ks?.on);
     const b = $('#killBtn');
     b.classList.toggle('on', killOn);
-    b.textContent = killOn ? 'فعال کردن دوباره' : 'توقف اضطراری';
+    b.replaceChildren(icon(killOn ? 'play' : 'stop'), killOn ? 'فعال کردن دوباره' : 'توقف اضطراری');
     $('#killBox').classList.toggle('hidden', !killOn);
   }
   $('#killBtn').addEventListener('click', async () => {
@@ -680,11 +741,11 @@
   });
 
   const KIND_FA = { security_alert: ['امنیتی', 'error'], kill_switch_on: ['توقف اضطراری', 'error'], kill_switch_off: ['فعال‌سازی دوباره', 'ok'], auto: ['خودکار', 'auto'], approved: ['تأییدشده', 'approved'], rejected: ['رد شد', 'rejected'], approval_requested: ['درخواست تأیید', 'medium'], alert: ['هشدار', 'alert'], refused: ['خارج از محدوده', 'error'], llm_usage: ['هزینهٔ مدل', 'auto'], rule_fired: ['قانون خودکار', 'auto'], rule_skipped: ['قانون: سقف پر شد', 'alert'], rule_disabled: ['قانون خاموش شد', 'ok'] };
-  const ACTOR = { agent: '🤖', user: '👤', watcher: '👁️', rule: '⚙️' };
+  const ACTOR = { agent: 'sparkles', user: 'user', watcher: 'eye', rule: 'cog' };
   function auditRow(e) {
     const [k, cls] = KIND_FA[e.kind] || [e.kind, ''];
     return h('div', { class: 'aud' },
-      h('div', { class: 'row' }, h('span', {}, ACTOR[e.actor] || '•'), h('span', { class: `badge ${cls}` }, k), h('b', {}, e.summary || e.tool), e.app ? h('span', { class: 'small-muted' }, e.app) : null,
+      h('div', { class: 'row' }, icon(ACTOR[e.actor] || 'info'), h('span', { class: `badge ${cls}` }, k), h('b', {}, e.summary || e.tool), e.app ? h('span', { class: 'small-muted' }, e.app) : null,
         e.status === 'error' ? h('span', { class: 'badge error' }, 'خطا') : null, h('span', { class: 'time' }, time(e.at))),
       e.durationMs ? h('div', { class: 's' }, `${e.tool} · ${faNum(e.durationMs / 1000, 1)} ثانیه`) : h('div', { class: 's' }, e.tool),
     );
@@ -743,6 +804,9 @@
     const r = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ passcode: $('#passcode').value }) });
     if (r.ok) { $('#login').classList.add('hidden'); boot(); }
   });
+
+  // Icons for the header buttons and the suggestion chips (named in the HTML with data-icon).
+  document.querySelectorAll('[data-icon]').forEach((el) => el.prepend(icon(el.dataset.icon)));
 
   const welcomeClone = $('#welcome');
 

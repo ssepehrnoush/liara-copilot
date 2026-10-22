@@ -1,9 +1,10 @@
 <!doctype html>
-<html lang="fa" dir="rtl">
+<html lang="fa" dir="rtl" data-theme="dark">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>لیارا کوپایلت</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700&display=swap" rel="stylesheet">
@@ -13,7 +14,7 @@
   <header class="topbar">
     <div class="brand">
       <div class="logo" aria-hidden="true">
-        <svg viewBox="0 0 32 32" width="26" height="26"><rect x="1" y="1" width="30" height="30" rx="9" fill="var(--accent)"/><path d="M10 17l4 4 8-9" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <svg viewBox="0 0 32 32" width="28" height="28"><rect x="1" y="1" width="30" height="30" rx="9" fill="var(--accent-soft)" stroke="var(--accent)" stroke-opacity=".45"/><g transform="translate(4 4)" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.14-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.14a.5.5 0 0 1 .96 0l1.58 6.14a2 2 0 0 0 1.44 1.44l6.14 1.58a.5.5 0 0 1 0 .96l-6.14 1.58a2 2 0 0 0-1.44 1.44l-1.58 6.14a.5.5 0 0 1-.96 0z"/></g></svg>
       </div>
       <div class="title" title="دستیار دیپلوی و نگهداری سایت روی لیارا">لیارا کوپایلت</div>
       <div class="status">
@@ -22,8 +23,8 @@
       </div>
     </div>
     <div class="chips">
-      <a class="chip link" href="paths.html" title="مقایسهٔ مدل‌ها، هزینهٔ هر گفتگو و اجرا روی سرور خودی">مسیرهای اجرا</a>
-      <button id="resetBtn" class="ghost small" title="شروع گفتگوی تازه">گفتگوی تازه</button>
+      <a class="chip link" data-icon="route" href="paths.html" title="مقایسهٔ مدل‌ها، هزینهٔ هر گفتگو و اجرا روی سرور خودی">مسیرهای اجرا</a>
+      <button id="resetBtn" class="ghost small" data-icon="plus" title="شروع گفتگوی تازه">گفتگوی تازه</button>
       <button id="killBtn" class="ghost small killbtn" title="توقف اضطراری: از این لحظه هیچ تغییری روی لیارا انجام نمی‌شود">توقف اضطراری</button>
       <span id="balanceChip" class="hidden"></span>
     </div>
@@ -44,12 +45,12 @@
       </div>
       <div class="composer">
         <div class="suggestions" id="suggestions">
-          <button data-text="پروژه‌ام توی پوشهٔ demo/shop-v1 هست. می‌خوام روی لیارا بالا بیاد.">🚀 پروژه‌ام را منتشر کن</button>
-          <button data-text="نسخهٔ جدید پروژه توی پوشهٔ demo/shop-v2 آماده‌ست. منتشرش کن.">📦 انتشار نسخهٔ جدید</button>
-          <button data-text="صفحهٔ پرداخت سایتم (/checkout) خطای ۵۰۰ می‌ده. چی شده؟">🔥 خطای ۵۰۰ دارم</button>
-          <button data-text="سایتم خیلی کند شده. بررسی کن ببین مشکل از کجاست.">🐢 سایتم کند شده</button>
-          <button data-text="وضعیت سرویس‌هام چطوره؟">📊 وضعیت سرویس‌ها</button>
-          <button data-text="از این به بعد هر وقت رم سایتم از ۸۵٪ گذشت، خودت ری‌استارتش کن و خبرم کن؛ ساعتی حداکثر یک بار.">⚙️ قانون خودکار</button>
+          <button data-text="پروژه‌ام توی پوشهٔ demo/shop-v1 هست. می‌خوام روی لیارا بالا بیاد." data-icon="rocket">پروژه‌ام را منتشر کن</button>
+          <button data-text="نسخهٔ جدید پروژه توی پوشهٔ demo/shop-v2 آماده‌ست. منتشرش کن." data-icon="upload">انتشار نسخهٔ جدید</button>
+          <button data-text="صفحهٔ پرداخت سایتم (/checkout) خطای ۵۰۰ می‌ده. چی شده؟" data-icon="flame">خطای ۵۰۰ دارم</button>
+          <button data-text="سایتم خیلی کند شده. بررسی کن ببین مشکل از کجاست." data-icon="gauge">سایتم کند شده</button>
+          <button data-text="وضعیت سرویس‌هام چطوره؟" data-icon="chart">وضعیت سرویس‌ها</button>
+          <button data-text="از این به بعد هر وقت رم سایتم از ۸۵٪ گذشت، خودت ری‌استارتش کن و خبرم کن؛ ساعتی حداکثر یک بار." data-icon="cog">قانون خودکار</button>
         </div>
         <form id="form" class="inputrow">
           <textarea id="input" rows="1" placeholder="درخواستتان را ساده بنویسید؛ مثلاً «سایتم بالا نمیاد»" aria-label="پیام"></textarea>
@@ -59,7 +60,7 @@
     </section>
 
     <aside class="side" aria-label="وضعیت سرویس‌ها">
-      <div id="killBox" class="alert down hidden"><span class="msg-a">🛑 توقف اضطراری روشن است: کوپایلت فقط می‌خواند و هیچ تغییری روی لیارا نمی‌دهد.</span></div>
+      <div id="killBox" class="alert down hidden"><span class="msg-a">توقف اضطراری روشن است: کوپایلت فقط می‌خواند و هیچ تغییری روی لیارا نمی‌دهد.</span></div>
       <div id="alertBox" class="alert hidden"></div>
       <div class="session"><span id="costChip" class="chip muted hidden"></span></div>
       <div class="tabs" role="tablist">

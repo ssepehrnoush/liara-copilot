@@ -1,5 +1,5 @@
 {
-  "name": "ketabkadeh-app",
+  "name": "ketabkadeh-final",
   "version": "3.0.0",
   "description": "Ketabkadeh: a tiny Persian bookshop used as the Liara Copilot demo app",
   "main": "server.js",
